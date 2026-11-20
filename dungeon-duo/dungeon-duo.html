@@ -352,6 +352,12 @@
   // =====================================================================
   //  СОХРАНЕНИЕ
   // =====================================================================
+  var DIFFS = [
+    { name: "Обычно", hp: 1, dmg: 1, aggr: 1, extra: 0, elite: 0, pot: 0.35, potCh: 0.08, rew: 1, col: "#7dff8a" },
+    { name: "Сложно", hp: 1.45, dmg: 1.45, aggr: 1.25, extra: 1, elite: 0.06, pot: 0.25, potCh: 0.05, rew: 1.3, col: "#ffb03a" },
+    { name: "Кошмар", hp: 2, dmg: 2, aggr: 1.5, extra: 2, elite: 0.14, pot: 0.2, potCh: 0.035, rew: 1.7, col: "#ff4a5a" }
+  ];
+  function DIF() { return DIFFS[save && save.diff !== undefined ? save.diff : 1]; }
   var SAVE_KEY = "dungeon_duo_save_v3", save = null;
   function newHero(cls) {
     var C = CLASSES[cls], sk = {}; sk[C.start] = 1;
@@ -780,6 +786,7 @@
       e.spd = opt.boss === "golem" ? 42 : opt.boss === "queen" ? 50 : 55; e.xp = Math.round(400 * (1 + 0.6 * curLoc)); e.gm = 1 + 0.6 * curLoc;
       e.spiral = 0; e.spiralA = 0; e.nextAtk = null; e.jumpT = 0;
     }
+    var Df = DIF(); e.hp *= Df.hp; e.dmg *= Df.dmg; e.xp = Math.round(e.xp * Df.rew); e.gm *= Df.rew;
     e.maxHp = e.hp;
     enemies.push(e);
     return e;
@@ -799,10 +806,10 @@
       var r = rooms[i];
       if (r.start) continue;
       if (bossFloor && r.exit) { var c = roomCenter(r); spawnEnemy("boss", c.x, c.y - 20, { boss: LOCS[curLoc].boss }); continue; }
-      var n = bossFloor ? irnd(1, 2) : irnd(2, 3 + floorNum);
+      var n = (bossFloor ? irnd(1, 2) : irnd(2, 3 + floorNum)) + DIF().extra;
       for (var k = 0; k < n; k++) {
         var s = randomSpotIn(r, 1.5);
-        spawnEnemy(pick(pool), s.x, s.y, { elite: Math.random() < 0.05 + 0.04 * curLoc + 0.02 * floorNum });
+        spawnEnemy(pick(pool), s.x, s.y, { elite: Math.random() < 0.05 + 0.04 * curLoc + 0.02 * floorNum + DIF().elite });
       }
     }
   }
@@ -861,7 +868,7 @@
     for (var i = 0; i < n; i++)
       pickups.push({ type: "gold", x: x + rnd(-6, 6), y: y + rnd(-6, 6), z: 4, vz: rnd(120, 220), val: Math.max(1, Math.round(total / n)), vx: rnd(-90, 90), vy: rnd(-70, 70), t: 0 });
   }
-  function dropPotion(x, y) { pickups.push({ type: "potion", x: x, y: y, z: 4, vz: 180, val: 0.35, vx: rnd(-50, 50), vy: rnd(-40, 40), t: 0 }); }
+  function dropPotion(x, y) { pickups.push({ type: "potion", x: x, y: y, z: 4, vz: 180, val: DIF().pot, vx: rnd(-50, 50), vy: rnd(-40, 40), t: 0 }); }
 
   function killEnemy(e) {
     e.dead = true;
@@ -872,7 +879,7 @@
     sfx(140, 0.25, "sawtooth", 0.06, 0.3); noise(0.15, 0.05, 900);
     var g = irnd(e.g[0], e.g[1]) * e.gm;
     dropGold(e.x, e.y, g, big ? 16 : e.elite ? 5 : irnd(1, 3));
-    if (Math.random() < (big ? 1 : e.elite ? 0.5 : 0.08)) dropPotion(e.x, e.y);
+    if (Math.random() < (big ? 1 : e.elite ? 0.4 : DIF().potCh)) dropPotion(e.x, e.y);
     if (big) dropPotion(e.x + 20, e.y);
     for (var k = 0; k < players.length; k++) gainXp(players[k], e.xp);
     if (e.lastHit && e.lastHit.st.killHeal && !e.lastHit.down) { var p = e.lastHit; p.hp = Math.min(maxHp(p), p.hp + maxHp(p) * p.st.killHeal); }
@@ -1233,7 +1240,7 @@
     if (p.down) {
       if (!other.down && dist(p, other) < 50) {
         p.revive += dt;
-        if (p.revive >= 2) {
+        if (p.revive >= 1.6 + 0.4 * (save.diff === undefined ? 1 : save.diff)) {
           p.down = false; p.hp = Math.ceil(maxHp(p) * 0.4); p.inv = 1.5;
           floatText(p.x, p.y - 50, "Снова в бою!", "#7dff8a", 18); ring(p.x, p.y, 60, "#7dff8a", 0.5, 5);
           sfx(523, 0.15, "triangle", 0.07); sfx(784, 0.25, "triangle", 0.07, 0, 0.12);
@@ -1349,7 +1356,7 @@
   }
 
   function updateEnemy(e, dt) {
-    e.t += dt; e.cd -= dt; e.flash -= dt; e.frozen -= dt; e.slowT -= dt; e.slashT -= dt;
+    e.t += dt; e.cd -= dt * DIF().aggr; e.flash -= dt; e.frozen -= dt; e.slowT -= dt; e.slashT -= dt;
     if (e.burnT > 0) {
       e.burnT -= dt; e.burnTick -= dt;
       if (Math.random() < 0.3) parts.push({ x: e.x + rnd(-8, 8), y: e.y - rnd(0, 24), vx: rnd(-10, 10), vy: -50, life: 0.4, max: 0.4, color: pick(["#ff8a2a", "#ffcf4a"]), size: 3, g: 0 });
@@ -1462,7 +1469,7 @@
     }
     if (e.wind > 0) {
       e.wind -= dt;
-      if (e.wind <= 0) { bossAttack(e, e.nextAtk, p, a, cx, cy, rage); e.cd = rage ? 1.2 : 2; }
+      if (e.wind <= 0) { bossAttack(e, e.nextAtk, p, a, cx, cy, rage); e.cd = (rage ? 1.2 : 2) / DIF().aggr; }
       return;
     }
     if (e.boss === "lord" && d < 120) moveEnt(e, -cx * sp, -cy * sp);
@@ -1678,7 +1685,7 @@
   function toHub() { state = "hub"; stateT = 0; writeSave(); menuBgReset(); }
 
   function completeLocation() {
-    var first = !save.done[curLoc], reward = (first ? 120 : 50) * (curLoc + 1);
+    var first = !save.done[curLoc], reward = Math.round((first ? 120 : 50) * (curLoc + 1) * DIF().rew);
     save.gold += reward; save.done[curLoc] = true;
     if (curLoc + 1 > save.unlocked - 1 && curLoc + 1 < LOCS.length) save.unlocked = curLoc + 2;
     victoryInfo = { loc: curLoc, reward: reward, first: first, final: curLoc === LOCS.length - 1 };
@@ -1841,7 +1848,7 @@
       } else if (inp.e.back) { s.ready = false; sfx(300, 0.08); }
     }
     if (sel[0].ready && sel[1].ready) {
-      save = { gold: 0, unlocked: 1, done: [], heroes: [newHero(sel[0].cls), newHero(sel[1].cls)] };
+      save = { gold: 0, unlocked: 1, done: [], diff: 1, heroes: [newHero(sel[0].cls), newHero(sel[1].cls)] };
       writeSave(); hubSel = 0;
       fadeTo(toHub);
     }
@@ -1853,6 +1860,7 @@
       if (inp.e.left) { hubSel = Math.max(0, hubSel - 1); sfx(500, 0.05); }
       if (inp.e.right) { hubSel = Math.min(LOCS.length - 1, hubSel + 1); sfx(500, 0.05); }
       if (inp.e.act) { state = "char"; stateT = 0; sfx(700, 0.06); return; }
+      if (inp.e.s1) { save.diff = ((save.diff === undefined ? 1 : save.diff) + 1) % 3; writeSave(); sfx(800, 0.06, "square", 0.05); }
       if (inp.e.start && stateT > 0.3) { writeSave(); state = "title"; stateT = 0; menuSel = 0; return; }
       if (inp.e.conf && stateT > 0.3) {
         if (hubSel < save.unlocked) { sfx(700, 0.1, "square", 0.05); var L = hubSel; fadeTo(function () { startLocation(L); }); }
@@ -2030,7 +2038,7 @@
       ctx.globalAlpha = 0.85; ctx.drawImage(heroSprite(p.cls, p.id, "idle"), -24, -24, 48, 48); ctx.restore(); ctx.globalAlpha = 1;
       text("ПОМОГИ!", x, y - 44 + Math.sin(T * 5) * 3, 13, "#ff7070", "center", FT, true, 3);
       ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(x, y - 10, 26, 0, 6.283); ctx.stroke();
-      if (p.revive > 0) { ctx.strokeStyle = "#7dff8a"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y - 10, 26, -1.57, -1.57 + 6.283 * (p.revive / 2)); ctx.stroke(); }
+      if (p.revive > 0) { ctx.strokeStyle = "#7dff8a"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y - 10, 26, -1.57, -1.57 + 6.283 * (p.revive / (1.6 + 0.4 * (save.diff === undefined ? 1 : save.diff)))); ctx.stroke(); }
       return;
     }
     ctx.strokeStyle = PCOL[p.id].c; ctx.globalAlpha = 0.6; ctx.lineWidth = 2;
@@ -2699,7 +2707,11 @@
     text(Ls.desc, px + 20, py + 52, 14, "#cfc3ad", "left", FT, false);
     text("Рекомендуемый уровень: " + Ls.rec + "   ·   Этажей: 3   ·   Босс: " + BOSSES[Ls.boss].name, px + 20, py + 76, 13, "#ddd", "left", FT, false);
     text(hubSel >= save.unlocked ? "Закрыто — пройдите предыдущую локацию" : save.done[hubSel] ? "Пройдено ✓  (можно пройти снова за золото и опыт)" : "Не пройдено", px + 20, py + 100, 13, hubSel >= save.unlocked ? "#ff8a7a" : save.done[hubSel] ? "#ffd34d" : "#9ad", "left", FT, true);
-    text("◄ ► выбор   ·   A — в путь   ·   Y — герои: навыки и оружие   ·   Start — в главное меню", VW / 2, VH - 26, 13, "#bba", "center", FT, false, 3);
+    var Df = DIF();
+    panel(VW / 2 - 150, 96, 300, 30, Df.col);
+    text("Сложность: " + Df.name + "   (X — сменить)", VW / 2, 111, 14, Df.col, "center", FT, true, 2);
+    text(save.diff === 0 ? "враги слабее, больше лечения" : save.diff === 2 ? "враги вдвое сильнее, награда ×1.7" : "враги сильнее, награда ×1.3", VW / 2, 138, 12, "#bbb", "center", FT, false, 3);
+    text("◄ ► выбор   ·   A — в путь   ·   X — сложность   ·   Y — герои: навыки и оружие   ·   Start — меню", VW / 2, VH - 26, 13, "#bba", "center", FT, false, 3);
   }
   function hy0() { return 22; }
 
