@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Танковая дуэль</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14161c; color: #e8e8e8;
+    font-family: Tahoma, Verdana, sans-serif; overflow: hidden; }
+  #wrap { display: flex; align-items: center; justify-content: center; height: 100%; }
+  canvas { background: #2b3326; box-shadow: 0 0 30px #000; max-width: 100vw; max-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="960" height="640"></canvas></div>
+<script>
+(function () {
+  "use strict";
+  var cv = document.getElementById("c"), ctx = cv.getContext("2d");
+  var W = 960, H = 640, TOP = 40;          // верхние 40 px — табло
+  var WIN_SCORE = 5;
+  var TANK_R = 16, BULLET_R = 4, BULLET_SPEED = 330, MAX_BOUNCES = 3;
+  var MOVE_SPEED = 130, TURN_SPEED = 3.2, RELOAD = 0.45, MAX_BULLETS = 4;
+
+  // ---------- Карты (каждая клетка 40x40, поле 24x15) ----------
+  var MAPS = [
+    [
+      "........................",
+      "........................",
+      "...##..............##...",
+      "...#................#...",
+      "........#......#........",
+      "........#......#........",
+      "....#####......#####....",
+      "........................",
+      "....#####......#####....",
+      "........#......#........",
+      "........#......#........",
+      "...#................#...",
+      "...##..............##...",
+      "........................",
+      "........................"
+    ],
+    [
+      "........................",
+      "...........##...........",
+      "...........##...........",
+      "..####..........####....",
+      "........................",
+      "......#....##....#......",
+      "......#..........#......",
+      "..#...#....##....#...#..",
+      "......#..........#......",
+      "......#....##....#......",
+      "........................",
+      "....####..........####..",
+      "...........##...........",
+      "...........##...........",
+      "........................"
+    ],
+    [
+      "........................",
+      "........................",
+      "..#.#.#.#.#..#.#.#.#.#..",
+      "........................",
+      "...#......####......#...",
+      "...#................#...",
+      "...#....#......#....#...",
+      "........#......#........",
+      "...#....#......#....#...",
+      "...#................#...",
+      "...#......####......#...",
+      "........................",
+      "..#.#.#.#.#..#.#.#.#.#..",
+      "........................",
+      "........................"
+    ]
+  ];
+  var CELL = 40, walls = [], mapIndex = 0;
+
+  function buildMap(idx) {
+    walls = [];
+    var m = MAPS[idx];
+    for (var y = 0; y < m.length; y++)
+      for (var x = 0; x < m[y].length; x++)
+        if (m[y].charAt(x) === "#")
+          walls.push({ x: x * CELL, y: TOP + y * CELL, w: CELL, h: CELL });
+    // внешние границы
+    walls.push({ x: -50, y: TOP - 50, w: W + 100, h: 50 });
+    walls.push({ x: -50, y: H, w: W + 100, h: 50 });
+    walls.push({ x: -50, y: TOP, w: 50, h: H - TOP });
+    walls.push({ x: W, y: TOP, w: 50, h: H - TOP });
+  }
+
+  // ---------- Управление ----------
+  var keys = {};
+  window.addEventListener("keydown", function (e) {
+    keys[e.keyCode] = true;
+    if ([32, 13, 37, 38, 39, 40].indexOf(e.keyCode) >= 0) e.preventDefault();
+    onKey(e.keyCode);
+  });
+  window.addEventListener("keyup", function (e) { keys[e.keyCode] = false; });
+  window.addEventListener("blur", function () { keys = {}; });
+
+  // keyCode: W87 A65 S83 D68 Space32 F70 | стрелки 38 37 40 39, Enter13, L76, Num0 96
+  var CONTROLS = [
+    { up: [87], down: [83], left: [65], right: [68], fire: [32, 70] },
+    { up: [38], down: [40], left: [37], right: [39], fire: [13, 76, 96] }
+  ];
+  function pressed(list) { for (var i = 0; i < list.length; i++) if (keys[list[i]]) return true; return false; }
+
+  // ---------- Звук ----------
+  var audio = null;
+  function beep(freq, dur, type, vol) {
+    try {
+      if (!audio) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; audio = new AC(); }
+      var o = audio.createOscillator(), g = audio.createGain();
+      o.type = type || "square"; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol || 0.08, audio.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dur);
+      o.connect(g); g.connect(audio.destination);
+      o.start(); o.stop(audio.currentTime + dur);
+    } catch (err) {}
+  }
+
+  // ---------- Игровые объекты ----------
+  var tanks, bullets, particles, scores = [0, 0], state = "menu", roundTimer = 0, roundMsg = "";
+
+  function makeTank(i) {
+    return {
+      id: i, x: i === 0 ? 60 : W - 60, y: TOP + (H - TOP) / 2,
+      a: i === 0 ? 0 : Math.PI, reload: 0, alive: true,
+      color: i === 0 ? "#4fa3ff" : "#ff5a4f", dark: i === 0 ? "#1d4f8a" : "#8a221d",
+      name: i === 0 ? "Синий" : "Красный"
+    };
+  }
+
+  function startRound() {
+    buildMap(mapIndex);
+    tanks = [makeTank(0), makeTank(1)];
+    bullets = []; particles = [];
+    state = "play";
+  }
+
+  function newMatch() {
+    scores = [0, 0];
+    mapIndex = Math.floor(Math.random() * MAPS.length);
+    startRound();
+  }
+
+  function onKey(code) {
+    if (state === "menu" || state === "over") { if (code === 32 || code === 13) newMatch(); }
+    if (code === 27 && state === "play") state = "pause";
+    else if (code === 27 && state === "pause") state = "play";
+    if (code === 77 && state === "menu") { mapIndex = (mapIndex + 1) % MAPS.length; }
+  }
+
+  function circleHitsRect(cx, cy, r, w) {
+    var nx = Math.max(w.x, Math.min(cx, w.x + w.w));
+    var ny = Math.max(w.y, Math.min(cy, w.y + w.h));
+    var dx = cx - nx, dy = cy - ny;
+    return dx * dx + dy * dy < r * r;
+  }
+  function blocked(x, y, r) {
+    for (var i = 0; i < walls.length; i++) if (circleHitsRect(x, y, r, walls[i])) return true;
+    return false;
+  }
+
+  function explode(x, y, color, n) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 220;
+      particles.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+        life: 0.4 + Math.random() * 0.6, color: Math.random() < 0.5 ? color : "#ffcf4a" });
+    }
+  }
+
+  function updateTank(t, dt) {
+    if (!t.alive) return;
+    var c = CONTROLS[t.id];
+    if (pressed(c.left)) t.a -= TURN_SPEED * dt;
+    if (pressed(c.right)) t.a += TURN_SPEED * dt;
+    var mv = 0;
+    if (pressed(c.up)) mv += 1;
+    if (pressed(c.down)) mv -= 0.7;
+    if (mv) {
+      var dx = Math.cos(t.a) * MOVE_SPEED * mv * dt, dy = Math.sin(t.a) * MOVE_SPEED * mv * dt;
+      var other = tanks[1 - t.id];
+      function freeAt(x, y) {
+        if (blocked(x, y, TANK_R)) return false;
+        if (other.alive) { var ox = x - other.x, oy = y - other.y; if (ox * ox + oy * oy < 4 * TANK_R * TANK_R) return false; }
+        return true;
+      }
+      if (freeAt(t.x + dx, t.y)) t.x += dx;
+      if (freeAt(t.x, t.y + dy)) t.y += dy;
+    }
+    t.reload -= dt;
+    if (pressed(c.fire) && t.reload <= 0) {
+      var own = 0;
+      for (var i = 0; i < bullets.length; i++) if (bullets[i].owner === t.id) own++;
+      if (own < MAX_BULLETS) {
+        var bx = t.x + Math.cos(t.a) * (TANK_R + 8), by = t.y + Math.sin(t.a) * (TANK_R + 8);
+        if (!blocked(bx, by, BULLET_R)) {
+          bullets.push({ x: bx, y: by, vx: Math.cos(t.a) * BULLET_SPEED, vy: Math.sin(t.a) * BULLET_SPEED,
+            owner: t.id, bounces: 0, life: 6, safe: 0.15 });
+          beep(t.id === 0 ? 520 : 440, 0.08, "square", 0.05);
+        }
+        t.reload = RELOAD;
+      }
+    }
+  }
+
+  function updateBullets(dt) {
+    for (var i = bullets.length - 1; i >= 0; i--) {
+      var b = bullets[i], dead = false;
+      b.life -= dt; b.safe -= dt;
+      // по оси X
+      b.x += b.vx * dt;
+      if (blocked(b.x, b.y, BULLET_R)) { b.x -= b.vx * dt; b.vx = -b.vx; b.bounces++; beep(900, 0.03, "triangle", 0.03); }
+      b.y += b.vy * dt;
+      if (blocked(b.x, b.y, BULLET_R)) { b.y -= b.vy * dt; b.vy = -b.vy; b.bounces++; beep(900, 0.03, "triangle", 0.03); }
+      if (b.bounces > MAX_BOUNCES || b.life <= 0) dead = true;
+
+      for (var k = 0; k < tanks.length && !dead; k++) {
+        var t = tanks[k];
+        if (!t.alive) continue;
+        if (t.id === b.owner && b.safe > 0 && b.bounces === 0) continue;
+        var dx = b.x - t.x, dy = b.y - t.y;
+        if (dx * dx + dy * dy < (TANK_R + BULLET_R) * (TANK_R + BULLET_R)) {
+          t.alive = false; dead = true;
+          explode(t.x, t.y, t.color, 60);
+          beep(90, 0.5, "sawtooth", 0.15);
+        }
+      }
+      if (dead) bullets.splice(i, 1);
+    }
+  }
+
+  function checkRoundEnd() {
+    if (state !== "play") return;
+    var a0 = tanks[0].alive, a1 = tanks[1].alive;
+    if (a0 && a1) return;
+    if (a0 && !a1) { scores[0]++; roundMsg = "Очко получает Синий!"; }
+    else if (!a0 && a1) { scores[1]++; roundMsg = "Очко получает Красный!"; }
+    else roundMsg = "Ничья в раунде!";
+    state = "roundEnd"; roundTimer = 2.2;
+  }
+
+  function update(dt) {
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.92; p.vy *= 0.92; p.life -= dt;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+    if (state === "play" || state === "roundEnd") {
+      if (state === "play") { updateTank(tanks[0], dt); updateTank(tanks[1], dt); }
+      updateBullets(dt);
+      checkRoundEnd();
+    }
+    if (state === "roundEnd") {
+      roundTimer -= dt;
+      if (roundTimer <= 0) {
+        if (scores[0] >= WIN_SCORE || scores[1] >= WIN_SCORE) { state = "over"; beep(660, 0.4, "triangle", 0.1); }
+        else { mapIndex = (mapIndex + 1) % MAPS.length; startRound(); }
+      }
+    }
+  }
+
+  // ---------- Отрисовка ----------
+  function drawTank(t) {
+    if (!t.alive) return;
+    ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.a);
+    ctx.fillStyle = "#222"; ctx.fillRect(-17, -17, 34, 8); ctx.fillRect(-17, 9, 34, 8);   // гусеницы
+    ctx.fillStyle = t.color; ctx.fillRect(-14, -11, 28, 22);                              // корпус
+    ctx.fillStyle = t.dark; ctx.fillRect(0, -3, 24, 6);                                   // ствол
+    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();                         // башня
+    ctx.restore();
+  }
+
+  function drawField() {
+    ctx.fillStyle = "#2b3326"; ctx.fillRect(0, TOP, W, H - TOP);
+    ctx.strokeStyle = "rgba(255,255,255,0.04)"; ctx.lineWidth = 1;
+    for (var x = 0; x <= W; x += CELL) { ctx.beginPath(); ctx.moveTo(x, TOP); ctx.lineTo(x, H); ctx.stroke(); }
+    for (var y = TOP; y <= H; y += CELL) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    for (var i = 0; i < walls.length; i++) {
+      var w = walls[i];
+      ctx.fillStyle = "#7a6a55"; ctx.fillRect(w.x, w.y, w.w, w.h);
+      ctx.fillStyle = "#958470"; ctx.fillRect(w.x + 3, w.y + 3, w.w - 6, w.h - 6);
+    }
+  }
+
+  function drawHUD() {
+    ctx.fillStyle = "#1b1e26"; ctx.fillRect(0, 0, W, TOP);
+    ctx.font = "bold 20px Tahoma, sans-serif"; ctx.textBaseline = "middle";
+    ctx.textAlign = "left"; ctx.fillStyle = "#4fa3ff"; ctx.fillText("Синий: " + scores[0], 16, TOP / 2);
+    ctx.textAlign = "right"; ctx.fillStyle = "#ff5a4f"; ctx.fillText("Красный: " + scores[1], W - 16, TOP / 2);
+    ctx.textAlign = "center"; ctx.fillStyle = "#aaa"; ctx.font = "14px Tahoma, sans-serif";
+    ctx.fillText("До " + WIN_SCORE + " побед  ·  Esc — пауза  ·  Карта " + (mapIndex + 1), W / 2, TOP / 2);
+  }
+
+  function overlay(lines) {
+    ctx.fillStyle = "rgba(10,12,16,0.78)"; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    var y = H / 2 - (lines.length - 1) * 20;
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i];
+      ctx.font = (l.big ? "bold 44px " : "18px ") + "Tahoma, sans-serif";
+      ctx.fillStyle = l.color || "#e8e8e8";
+      ctx.fillText(l.t, W / 2, y); y += l.big ? 60 : 32;
+    }
+  }
+
+  function render() {
+    drawField();
+    if (state !== "menu") {
+      ctx.fillStyle = "#ffe27a";
+      for (var i = 0; i < bullets.length; i++) { ctx.beginPath(); ctx.arc(bullets[i].x, bullets[i].y, BULLET_R, 0, Math.PI * 2); ctx.fill(); }
+      drawTank(tanks[0]); drawTank(tanks[1]);
+    }
+    for (var j = 0; j < particles.length; j++) {
+      var p = particles[j]; ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.5));
+      ctx.fillStyle = p.color; ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+    drawHUD();
+
+    if (state === "menu") overlay([
+      { t: "ТАНКОВАЯ ДУЭЛЬ", big: true, color: "#ffe27a" },
+      { t: "Синий: W A S D — ехать, ПРОБЕЛ или F — огонь", color: "#4fa3ff" },
+      { t: "Красный: стрелки — ехать, ENTER, L или Num0 — огонь", color: "#ff5a4f" },
+      { t: "Снаряды отскакивают от стен — берегись своих же!" },
+      { t: "M — сменить карту (сейчас " + (mapIndex + 1) + " из " + MAPS.length + ")" },
+      { t: "Нажми ПРОБЕЛ или ENTER, чтобы начать", color: "#ffe27a" }
+    ]);
+    else if (state === "pause") overlay([{ t: "ПАУЗА", big: true }, { t: "Esc — продолжить" }]);
+    else if (state === "roundEnd") {
+      ctx.textAlign = "center"; ctx.font = "bold 32px Tahoma, sans-serif"; ctx.fillStyle = "#fff";
+      ctx.fillText(roundMsg, W / 2, TOP + 50);
+    } else if (state === "over") {
+      var w = scores[0] > scores[1] ? 0 : 1;
+      overlay([
+        { t: (w === 0 ? "СИНИЙ" : "КРАСНЫЙ") + " ПОБЕДИЛ!", big: true, color: w === 0 ? "#4fa3ff" : "#ff5a4f" },
+        { t: "Счёт " + scores[0] + " : " + scores[1] },
+        { t: "ПРОБЕЛ или ENTER — новая игра", color: "#ffe27a" }
+      ]);
+    }
+  }
+
+  // ---------- Главный цикл ----------
+  var last = 0;
+  function loop(ts) {
+    var dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
+    if (state !== "pause") update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+  buildMap(mapIndex);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
