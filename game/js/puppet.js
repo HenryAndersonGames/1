@@ -5,7 +5,7 @@
 // рукав и штанина гнутся, а не ломаются. Углы: 0 — вниз, +90 — вперёд, 180 — вверх, −90 — назад.
 
 const Puppet = { ready: false, P: [] };
-const HERO_SCALE = 0.74; // герои ниже зданий (раньше были выше крыш)
+const HERO_SCALE = 0.58; // герои ниже зданий (раньше были выше крыш)
 
 function loadImg(b64) {
   return new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.src = 'data:image/png;base64,' + b64; });

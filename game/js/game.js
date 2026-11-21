@@ -17,14 +17,16 @@ function msg(text, col = '#f2e6c8') {
   if (G.msgs.length > 4) G.msgs.shift();
 }
 
-function newGame() {
+function newGame(solo = G.solo) {
+  G.solo = !!solo;
   buildWorld();
   MM.dirty = true; MM.seen = null;
   const f = World.fire;
   Object.assign(G, { t: 0, day: 1, phase: 'day', phaseT: 0, kills: 0, overT: 0, zoneShown: {} });
   G.team = { wood: 4, scrap: 2, cloth: 1, fuel: 1, ammo: 0, band: 1, food: 2 };
-  G.players = [makePlayer(0, f.x - 50, f.y - 50), makePlayer(1, f.x + 50, f.y - 50)];
-  G.players[1].weapon = { type: 'pipe', dur: WEAPONS.pipe.durab };
+  G.players = G.solo ? [makePlayer(0, f.x, f.y - 50)] : [makePlayer(0, f.x - 50, f.y - 50), makePlayer(1, f.x + 50, f.y - 50)];
+  if (G.players[1]) G.players[1].weapon = { type: 'pipe', dur: WEAPONS.pipe.durab };
+  if (G.solo) G.team.band = 2;
   for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies', 'bombs', 'sparks', 'dmgNums', 'rubble', 'mines', 'turrets', 'vortexes']) G[k] = [];
   G.cam.x = f.x; G.cam.y = f.y - 80; G.cam.zoom = 1;
   G.flowDirty = true;
@@ -113,6 +115,8 @@ function planNight(n) {
   if (n >= 2) { add('jumper', 1 + n); add('ghoul', 3 * Math.ceil(n / 2)); }
   if (n >= 3) { add('brute', 1 + Math.floor((n - 3) / 2)); add('spider', n - 2); }
   if (n >= 4) add('void', n - 3);
+  // в одиночку ночь легче: ~60% монстров
+  if (G.solo) for (let i = list.length - 1; i >= 0; i--) if (Math.random() < 0.4 && list[i] !== 'brute') list.splice(i, 1);
   list.sort(() => Math.random() - 0.5);
   list.sort((a, b) => (a === 'brute') - (b === 'brute'));
   G.spawnQ = [];
@@ -201,6 +205,7 @@ function updateCamera(dt, instant) {
   G.cam.y = clamp(G.cam.y, v.h / 2 - 60, WORLD_H - v.h / 2);
 }
 function leash() {
+  if (G.players.length < 2) return;
   const [a, b] = G.players;
   if (a.state === 'dead' || b.state === 'dead') return;
   const v = viewSize(ZOOM_MIN);
@@ -266,7 +271,12 @@ function update(dt) {
     const z = zoneAt(p.x, p.y);
     if (z !== 'forest' && !G.zoneShown[z]) { G.zoneShown[z] = 1; const Z = World.zones.find((q) => q.id === z); msg(`${Z.name}`, '#f2e6c8'); }
   }
-  if (!G.players.some(alive)) {
+  // одиночная игра: без сознания — через 3 с бинт поднимает героя
+  if (G.solo) for (const p of G.players) {
+    if (p.state === 'downed' && G.team.band > 0) { p.soloT = (p.soloT || 0) + dt; if (p.soloT > 3) { p.soloT = 0; G.team.band--; p.state = 'normal'; p.hp = p.maxHp * 0.4; p.inv = 2; floatText(p.x, p.y - 100, 'Бинт! Встаю', '#9fe39a', 16); Sfx.play('revive'); } }
+    else p.soloT = 0;
+  }
+  if (!G.players.some(alive) && !(G.solo && G.team.band > 0 && G.players.some((p) => p.state === 'downed'))) {
     G.overT += dt;
     if (G.overT > 1.5) { G.state = 'over'; G.bestNight = Math.max(G.bestNight, G.day - 1); Sfx.play('down'); }
   } else G.overT = 0;
@@ -297,7 +307,7 @@ function separate() {
     }
   }
   const [a, b] = P;
-  if (a.state !== 'dead' && b.state !== 'dead') {
+  if (b && a.state !== 'dead' && b.state !== 'dead') {
     const dx = b.x - a.x, dy = b.y - a.y, R = a.r + b.r, d2 = dx * dx + dy * dy;
     if (d2 < R * R && d2 > 1e-6) { const d = Math.sqrt(d2), o = (R - d) / d / 2; a.x -= dx * o; a.y -= dy * o; b.x += dx * o; b.y += dy * o; }
   }

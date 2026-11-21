@@ -47,7 +47,7 @@ function killEnemy(e, by) {
   const d = EDEF[e.type];
   if (by && by.i !== undefined) {
     by.kills++; giveXP(by, d.xp);
-    const o = G.players[1 - by.i]; if (o.state !== 'dead') giveXP(o, Math.round(d.xp / 2));
+    const o = partner(by); if (o !== NOBODY && o.state !== 'dead') giveXP(o, Math.round(d.xp / 2));
     floatText(e.x, e.y - 40, `+${d.xp} XP`, '#e9d78a', 13);
   }
   if (e.type === 'titan') { addShake(14); msg('Титан повержен!', '#fff2b0'); for (let i = 0; i < 8; i++) dropFromLoot(rollLoot(pick(['industrial', 'lab', 'town'])), e.x, e.y); }

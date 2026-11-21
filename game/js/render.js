@@ -565,7 +565,7 @@ function drawOverlay(ctx, dk) {
       ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(p.x, p.y - 40, 18, 0, TAU); ctx.stroke();
       ctx.strokeStyle = '#d6493a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 40, 18, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
       ctx.fillStyle = '#ffd0c0'; ctx.font = `bold 18px ${FONT}`; ctx.fillText('!', p.x, p.y - 34);
-      const o = G.players[1 - p.i];
+      const o = partner(p);
       if (o.reviveTgt === p) { ctx.strokeStyle = '#9fe39a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 40, 25, -Math.PI / 2, -Math.PI / 2 + TAU * o.revive / (o.sk.med >= 2 ? 1.1 : 2.2)); ctx.stroke(); }
     }
     if (p.search) { ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(p.x, p.y - 128, 12, 0, TAU); ctx.stroke(); ctx.strokeStyle = '#e8d08a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 128, 12, -Math.PI / 2, -Math.PI / 2 + TAU * p.search.t / 1.2); ctx.stroke(); }

@@ -383,7 +383,7 @@ function useAbility(p, slot) {
       startMove(p, 'whirl', { name: 'Вихрь', base: 'L', k: 0.9, wind: 0.08, act: 0.9, rec: 0.25, arc: Math.PI, sw: [-3.1, 28], pose: 'spin', hits: 6, kb: 1.4, next: {} }); break;
     default: useAbilityExtra(p, id); break;
     case 'medic': {
-      const o = G.players[1 - p.i];
+      const o = partner(p);
       for (const q of [p, o]) if (alive(q) && dist(p.x, p.y, q.x, q.y) < 170) { q.hp = Math.min(q.maxHp, q.hp + 30); floatText(q.x, q.y - 96, '+30', '#9fe39a', 16); burst(q.x, q.y - 30, 30, 10, '#9fe39a', 100, 3); }
       Sfx.play('revive'); break;
     }
@@ -574,13 +574,17 @@ function hurtPlayer(p, dmg, src) {
   }
 }
 
+// напарник (в одиночной игре — «никто»)
+const NOBODY = { state: 'dead', i: 1, x: -1e5, y: -1e5, clingers: [], hp: 0, maxHp: 1, sk: { med: 0, str: 0 }, reviveTgt: null, revive: 0 };
+function partner(p) { return G.players.find((q) => q !== p) || NOBODY; }
 function downPlayer(p) {
   p.hp = 0; p.state = 'downed'; p.bleed = 25; p.menu = false; p.craft = false; p.atk = null;
   dropHeld(p, true);
   for (const e of p.clingers) { e.state = 'move'; e.host = null; e.stun = 1; e.x += rand(-20, 20); e.y += rand(-20, 20); }
   p.clingers.length = 0;
-  const o = G.players[1 - p.i];
-  msg(alive(o) ? `${pname(p)} без сознания! ${pname(o)}: держи ${Input.btn(o.i, 'interact')} рядом, чтобы поднять` : `${pname(p)} без сознания!`, '#ff8a7a');
+  const o = partner(p);
+  if (G.solo) msg(G.team.band > 0 ? `${pname(p)} без сознания… бинт поднимет через 3 с` : `${pname(p)} без сознания — бинтов нет!`, '#ff8a7a');
+  else msg(alive(o) ? `${pname(p)} без сознания! ${pname(o)}: держи ${Input.btn(o.i, 'interact')} рядом, чтобы поднять` : `${pname(p)} без сознания!`, '#ff8a7a');
   Sfx.play('down'); stain(p.x, p.y, 'rgba(70,10,8,0.6)', 18);
 }
 
@@ -592,7 +596,7 @@ function eat(p) {
 }
 function useBandage(p) {
   if (G.team.band <= 0) { floatText(p.x, p.y - 116, 'Нет бинтов', '#ff9a8a', 14); Sfx.play('deny'); return; }
-  const o = G.players[1 - p.i];
+  const o = partner(p);
   const ally = p.sk.med >= 3 && alive(o) && dist(p.x, p.y, o.x, o.y) < 90 && o.hp < o.maxHp;
   if (p.hp >= p.maxHp && !ally) { floatText(p.x, p.y - 116, 'Здоровье полное', '#bbb', 13); return; }
   G.team.band--;
@@ -604,7 +608,7 @@ function useBandage(p) {
 
 // ----- Взаимодействие (A) -----
 function interactTarget(p) {
-  const o = G.players[1 - p.i];
+  const o = partner(p);
   if (o.state === 'downed' && dist(p.x, p.y, o.x, o.y) < 60) return { t: 'revive', o };
   if (alive(o) && o.clingers.length && !p.clingers.length && dist(p.x, p.y, o.x, o.y) < 72) return { t: 'unclinger', o };
   if (p.held) return { t: 'drop' };

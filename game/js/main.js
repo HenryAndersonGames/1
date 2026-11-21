@@ -108,17 +108,18 @@ function frame(t) {
     G.cam.x = World.fire.x + Math.sin(t / 6000) * 300; G.cam.y = World.fire.y - 100;
     G.t += dt;
     render();
-    drawScreen('Shattered Dawn', controlsHelp().concat(['', '#Нажмите A / Enter, чтобы начать']), 'кооперативное выживание вдвоём · прототип', true);
-    if (Input.anyPressed('light') || Input.anyPressed('interact') || Input.anyPressed('start')) { Sfx.unlock(); newGame(); }
+    drawScreen('Shattered Dawn', controlsHelp().concat(['', '#A / Enter — играть вдвоём        Y / K — играть одному']), 'выживание вдвоём или в одиночку · прототип', true);
+    if (Input.anyPressed('heavy')) { Sfx.unlock(); newGame(true); }
+    else if (Input.anyPressed('light') || Input.anyPressed('interact') || Input.anyPressed('start')) { Sfx.unlock(); newGame(false); }
     return;
   }
   if (G.state === 'over') {
     render();
     drawScreen('Забег окончен', [
       `#Пережито ночей: ${G.day - 1}`, `Убито монстров: ${G.kills}`,
-      `Уровни: ${PAL[0].name} — ${G.players[0].lvl}, ${PAL[1].name} — ${G.players[1].lvl}`,
+      G.players.map((p) => `${PAL[p.i].name} — ур. ${p.lvl}`).join(', '),
       `Рекорд: ${G.bestNight} ноч.`, '', '#Start / Enter — новый забег',
-    ], 'оба игрока пали');
+    ], G.solo ? 'герой пал' : 'оба игрока пали');
     if (Input.anyPressed('start') || Input.anyPressed('light')) newGame();
     return;
   }
