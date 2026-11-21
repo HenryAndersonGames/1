@@ -2,7 +2,7 @@
 // ---------- Мир: карта, препятствия, постройки, навигация ----------
 const WORLD_W = 2560, WORLD_H = 1920, CELL = 32;
 const GW = WORLD_W / CELL, GH = WORLD_H / CELL;
-const WALL_H = 34; // визуальная высота стен
+const WALL_H = 52; // визуальная высота стен (как в art/*.svg)
 
 const World = {
   walls: [], trees: [], bushes: [], cars: [], structs: [], floors: [], roads: [],
@@ -81,9 +81,9 @@ function buildWorld() {
 
   // ---- Дорога и брошенные машины ----
   World.roads.push({ x: 0, y: 1488, w: WORLD_W, h: 80 });
-  World.cars.push({ x: 640, y: 1500, w: 112, h: 50, col: '#5b4a3a' });
-  World.cars.push({ x: 1568, y: 1510, w: 112, h: 50, col: '#3f4a4c' });
-  World.cars.push({ x: 2176, y: 1496, w: 112, h: 50, col: '#5a3a34' });
+  World.cars.push({ x: 640, y: 1500, w: 112, h: 50, v: 0 });
+  World.cars.push({ x: 1568, y: 1510, w: 112, h: 50, v: 1 });
+  World.cars.push({ x: 2176, y: 1496, w: 112, h: 50, v: 2 });
 
   // ---- Руины с припасами ----
   const ruins = [
