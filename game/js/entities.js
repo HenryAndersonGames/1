@@ -412,40 +412,80 @@ function updateAllies(dt) {
   }
 }
 
+// ----- Огнестрел: магазин, перезарядка, разрывные патроны -----
+const wMul = (w) => 1 + 0.25 * (w.up || 0);                       // улучшение урона
+const wMax = (w) => WEAPONS[w.type].durab * (1 + 0.5 * (w.tough || 0)); // улучшение прочности
+const magSize = (w) => Math.round(WEAPONS[w.type].gun.mag * (w.bigmag ? 1.5 : 1));
+function startReload(p) {
+  const W = wep(p), w = p.weapon;
+  if (!W.gun || p.reloadT > 0) return false;
+  if (w.mag >= magSize(w)) return false;
+  if (G.team.ammo + G.team.xammo <= 0) { floatText(p.x, p.y - 100, 'Нет патронов — сделай на верстаке', '#ff9a8a', 13); Sfx.play('click'); p.gunCd = 0.4; return false; }
+  p.reloadT = W.gun.reload; p.reloadMax = W.gun.reload; Sfx.play('click'); return true;
+}
+function finishReload(p) {
+  const W = wep(p), w = p.weapon; if (!W.gun) return;
+  let need = magSize(w) - w.mag;
+  const x = Math.min(need, G.team.xammo); G.team.xammo -= x; w.xmag = (w.xmag || 0) + x; need -= x;
+  const n = Math.min(need, G.team.ammo); G.team.ammo -= n;
+  w.mag += x + n;
+  Sfx.play('build'); floatText(p.x, p.y - 100, x ? `Заряжено: ${w.mag} (разрывных ${w.xmag})` : `Заряжено: ${w.mag}`, '#e0c070', 13);
+}
+// маленький взрыв разрывной пули: ранит только монстров рядом
+function bulletBlast(x, y, dmg, by) {
+  G.flashes.push({ x, y, r: 160, t: 0.12 });
+  burst(x, y, 14, 12, '#ffb040', 220, 4, 0.4); burst(x, y, 10, 8, '#3a3028', 160, 4, 0.6);
+  stain(x, y, 'rgba(10,8,6,0.4)', 18); Sfx.play('explode'); addShake(4);
+  for (const e of G.enemies) { const d = dist(x, y, e.x, e.y); if (d < 62 + e.r && !e.dead && e.state !== 'dying') damageEnemy(e, dmg * (1 - d / (62 + e.r) * 0.5), { x, y }, 320, 0.6); }
+}
 function shoot(p) {
-  const W = wep(p), gun = W.gun;
-  if (p.gunCd > 0) return;
+  const W = wep(p), gun = W.gun, w = p.weapon;
+  if (p.gunCd > 0 || p.reloadT > 0) return;
+  if (w.mag === undefined) w.mag = magSize(w);
+  if (w.mag <= 0) { startReload(p); return; }
   attackAim(p, null, true);
-  if (G.team.ammo <= 0) { floatText(p.x, p.y - 116, 'Нет патронов', '#ff9a8a', 14); Sfx.play('click'); p.gunCd = 0.3; return; }
-  G.team.ammo--; p.gunCd = gun.rate;
+  w.mag--; p.gunCd = gun.rate; p.idleGun = 0;
+  const boom = (w.xmag || 0) > 0; if (boom) w.xmag--;
   p.state = 'light'; p.t = 0; p.atk = { gun: true, dur: W.L.dur, anim: 'shoot' };
-  const mx = p.x + Math.cos(p.face) * 30, my = p.y - 38 + Math.sin(p.face) * 18;
+  const mx = p.x + Math.cos(p.face) * 30, my = p.y - 38 * HERO_SCALE + Math.sin(p.face) * 18;
+  const mul = wMul(w) * (1 + 0.05 * p.sk.str) * (p.rageT > 0 ? 1.3 : 1);
+  let blastAt = null;
   for (let k = 0; k < gun.pellets; k++) {
     const a = p.face + (Math.random() - 0.5) * gun.spread * 2;
     const dx = Math.cos(a), dy = Math.sin(a);
-    let ex = p.x, ey = p.y, hitE = null;
+    let ex = p.x, ey = p.y, left = gun.pierce || 1;
+    const hit = new Set();
     for (let d = 16; d < gun.range; d += 8) {
       const x = p.x + dx * d, y = p.y + dy * d;
       ex = x; ey = y;
-      let boom = false;
-      for (const pr of World.props) if (pr.explosive && !pr.dead && x > pr.x && x < pr.x + pr.w && y > pr.y - 20 && y < pr.y + pr.h) { damageProp(pr, 30); boom = true; break; }
-      if (boom || pointBlocked(x, y)) break;
-      let blocked = false;
-      sgQuery(SG.dcells, x - 1, y - 1, x + 1, y + 1, (s) => { if (s.solid && !s.low && x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h) { blocked = true; return false; } });
-      if (blocked) break;
-      for (const e of G.enemies) if (!e.dead && e.state !== 'dying' && e.state !== 'cling' && !e.hidden && dist2(x, y, e.x, e.y - 10) < (e.r + 6) * (e.r + 6)) { hitE = e; break; }
-      if (hitE) break;
-      for (const pr of World.props) if (pr.explosive && !pr.dead && x > pr.x && x < pr.x + pr.w && y > pr.y - 20 && y < pr.y + pr.h) { damageProp(pr, 30); blocked = true; break; }
-      if (blocked) break;
+      let stop = false;
+      for (const pr of World.props) if (pr.explosive && !pr.dead && x > pr.x && x < pr.x + pr.w && y > pr.y - 20 && y < pr.y + pr.h) { damageProp(pr, 40); stop = true; break; }
+      if (stop || pointBlocked(x, y)) break;
+      sgQuery(SG.dcells, x - 1, y - 1, x + 1, y + 1, (s) => { if (s.solid && !s.low && x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h) { stop = true; return false; } });
+      if (stop) break;
+      for (const e of G.enemies) {
+        if (e.dead || e.state === 'dying' || e.state === 'cling' || e.hidden || hit.has(e)) continue;
+        if (dist2(x, y, e.x, e.y - 10) > (e.r + 6) * (e.r + 6)) continue;
+        hit.add(e);
+        // дробь слабеет с расстоянием, пуля — нет
+        const fall = gun.pellets > 1 ? 1 - 0.5 * d / gun.range : 1;
+        damageEnemy(e, gun.dmg * mul * fall * (boom ? 1.25 : 1), p, gun.kb * (gun.pellets > 1 ? 1.6 : 1), gun.stun || 0.15);
+        if (!blastAt) blastAt = { x: e.x, y: e.y };
+        if (--left <= 0) { stop = true; break; }
+      }
+      if (stop) break;
     }
-    if (hitE) damageEnemy(hitE, gun.dmg * (1 + 0.05 * p.sk.str), p, 120, 0.15);
-    G.tracers.push({ x0: mx, y0: my, x1: ex, y1: ey - 20, t: 0.08 });
+    if (boom && !blastAt && k === 0) blastAt = { x: ex, y: ey };
+    G.tracers.push({ x0: mx, y0: my, x1: ex, y1: ey - 20, t: gun.bolt ? 0.14 : 0.08, col: boom ? '#ff8a40' : gun.bolt ? '#e8e0c8' : null });
   }
-  G.flashes.push({ x: mx, y: my, r: 150, t: 0.07 });
-  burst(mx, my, 20, 4, '#ffd070', 120, 2.5, 0.2);
-  Sfx.play(gun.pellets > 1 ? 'shotgun' : 'shot'); addShake(gun.pellets > 1 ? 5 : 2);
+  if (boom && blastAt) bulletBlast(blastAt.x, blastAt.y, gun.pellets > 1 ? 70 : 45 * wMul(w), p);
+  if (!gun.bolt) { G.flashes.push({ x: mx, y: my, r: 150, t: 0.07 }); burst(mx, my, 20, 4, '#ffd070', 120, 2.5, 0.2); }
+  Sfx.play(gun.bolt ? 'throw' : gun.pellets > 1 ? 'shotgun' : 'shot'); addShake(gun.bolt ? 1 : gun.pellets > 1 ? 7 : gun.dmg > 100 ? 6 : 3);
+  // отдача
+  const kb = gun.pellets > 1 ? 160 : gun.dmg > 100 ? 140 : 40; p.kx -= Math.cos(p.face) * kb; p.ky -= Math.sin(p.face) * kb;
   alertNoise(p.x, p.y, gun.noise);
   wearWeapon(p, 1);
+  if (w.mag <= 0) startReload(p);
 }
 
 function wearWeapon(p, n) {
@@ -462,7 +502,7 @@ function wearWeapon(p, n) {
 
 function meleeHit(p) {
   const a = p.atk, M = a.M, B = a.B, W = wep(p), heavy = M.base === 'H';
-  let dmg = B.dmg * M.k * (1 + 0.15 * Math.min(p.sk.str, 3) + (p.sk.str >= 4 ? 0.15 : 0)) * gearDmgMul(p);
+  let dmg = wMul(p.weapon) * (p.weapon.type === 'fists' && p.knuckles ? 1.8 : 1) * B.dmg * M.k * (1 + 0.15 * Math.min(p.sk.str, 3) + (p.sk.str >= 4 ? 0.15 : 0)) * gearDmgMul(p);
   let crit = '';
   dmg *= 1 + (p.sk.str >= 6 ? 0.1 : 0) + (p.sk.str >= 8 ? 0.15 : 0);
   if (p.sk.mar >= 7 && (p.comboN || 0) >= 4) dmg *= 1.3;
@@ -719,14 +759,16 @@ function interact(p) {
 function takeWeapon(p, it) {
   if (it.cat === 'g') { equipGear(p, it); return; }
   G.items.splice(G.items.indexOf(it), 1);
-  if (p.weapon.type === 'fists') p.weapon = { type: it.type, dur: it.dur };
-  else if (!p.bag) { p.bag = p.weapon; p.weapon = { type: it.type, dur: it.dur }; floatText(p.x, p.y - 140, `${WEAPONS[p.bag.type].name} → в сумку`, '#c8bca0', 13); }
-  else { G.items.push({ cat: 'w', type: p.weapon.type, dur: p.weapon.dur, x: p.x + Math.cos(p.face + 2) * 14, y: p.y + 6, held: false, fly: false }); p.weapon = { type: it.type, dur: it.dur }; }
-  floatText(p.x, p.y - 120, WEAPONS[it.type].name, '#f0e4c4', 15); Sfx.play('pickup');
+  const nw = { type: it.type, dur: it.dur, up: it.up || 0, tough: it.tough || 0, mag: it.mag, xmag: it.xmag || 0, bigmag: it.bigmag };
+  p.reloadT = 0;
+  if (p.weapon.type === 'fists') p.weapon = nw;
+  else if (!p.bag) { p.bag = p.weapon; p.weapon = nw; floatText(p.x, p.y - 140, `${WEAPONS[p.bag.type].name} → в сумку`, '#c8bca0', 13); }
+  else { G.items.push(Object.assign({ cat: 'w', x: p.x + Math.cos(p.face + 2) * 14, y: p.y + 6, held: false, fly: false }, p.weapon)); p.weapon = nw; }
+  floatText(p.x, p.y - 120, WEAPONS[it.type].name + (nw.up ? ` +${nw.up}` : ''), '#f0e4c4', 15); Sfx.play('pickup');
 }
 function swapWeapon(p) {
   if (!p.bag) { floatText(p.x, p.y - 116, 'В сумке пусто', '#bbb', 13); return; }
-  const t = p.weapon; p.weapon = p.bag; p.bag = t.type === 'fists' ? null : t;
+  const t = p.weapon; p.weapon = p.bag; p.bag = t.type === 'fists' ? null : t; p.reloadT = 0;
   floatText(p.x, p.y - 120, WEAPONS[p.weapon.type].name, '#f0e4c4', 15); Sfx.play('pickup');
 }
 function searchProp(p, pr) {
@@ -742,7 +784,7 @@ function searchProp(p, pr) {
 function dropFromLoot(v, x, y) {
   if (v === 'band') dropPickup('band', x, y);
   else if (v === 'armor') dropPickup('armor', x, y);
-  else if (v.startsWith('r:')) { const k = v.slice(2); dropPickup(k, x, y); if (k === 'ammo') dropPickup(k, x, y); }
+  else if (v.startsWith('r:')) { const k = v.slice(2); dropPickup(k, x, y); if (k === 'ammo' || k === 'xammo') dropPickup(k, x, y); }
   else if (v.startsWith('w:')) { const t = v.slice(2); G.items.push({ cat: 'w', type: t, dur: Math.round(WEAPONS[t].durab * rand(0.5, 1)), x: x + rand(-14, 14), y: y + rand(-4, 8), held: false, fly: false }); }
   else if (v.startsWith('t:')) G.items.push({ cat: 't', kind: v.slice(2), x: x + rand(-14, 14), y: y + rand(-4, 8), held: false, fly: false });
   else if (v.startsWith('g:')) { const id = v.slice(2); G.items.push({ cat: 'g', id, dur: Math.round(GEAR[id].dur * rand(0.6, 1)), x: x + rand(-14, 14), y: y + rand(-4, 8), held: false, fly: false }); }
@@ -750,16 +792,31 @@ function dropFromLoot(v, x, y) {
 
 function craft(p, r) {
   if (r.eng && p.sk.eng < r.eng) { floatText(p.x, p.y - 124, `Нужна Инженерия ${r.eng}`, '#ff9a8a', 14); Sfx.play('deny'); return; }
-  if (r.need && p.weapon.type !== r.need) { floatText(p.x, p.y - 124, 'Нужна бита в руках', '#ff9a8a', 14); Sfx.play('deny'); return; }
-  if (r.id === 'repair' && (p.weapon.type === 'fists' || p.weapon.dur >= WEAPONS[p.weapon.type].durab)) { floatText(p.x, p.y - 124, 'Нечего чинить', '#bbb', 14); return; }
+  if (r.need && p.weapon.type !== r.need) { floatText(p.x, p.y - 124, `Нужно в руках: ${WEAPONS[r.need].name.toLowerCase()}`, '#ff9a8a', 14); Sfx.play('deny'); return; }
+  const no = (t) => { floatText(p.x, p.y - 124, t, '#ff9a8a', 14); Sfx.play('deny'); };
+  if (r.id === 'repair' && (p.weapon.type === 'fists' || p.weapon.dur >= wMax(p.weapon))) { floatText(p.x, p.y - 124, 'Нечего чинить', '#bbb', 14); return; }
+  if ((r.id === 'upg_dmg' || r.id === 'upg_tough') && p.weapon.type === 'fists') return no('Возьми оружие в руки');
+  if (r.id === 'upg_dmg' && (p.weapon.up || 0) >= 3) return no('Уже +3 — максимум');
+  if (r.id === 'upg_tough' && (p.weapon.tough || 0) >= 1) return no('Уже укреплено');
+  if (r.id === 'upg_mag' && (!WEAPONS[p.weapon.type].gun || p.weapon.bigmag)) return no(WEAPONS[p.weapon.type].gun ? 'Магазин уже расширен' : 'Нужен огнестрел в руках');
+  if (r.id === 'knuckles' && p.knuckles) return no('Кастет уже есть');
   for (const [k, v] of Object.entries(r.cost)) if (G.team[k] < v) { floatText(p.x, p.y - 124, `Не хватает: ${RES[k].name}`, '#ff9a8a', 14); Sfx.play('deny'); return; }
   for (const [k, v] of Object.entries(r.cost)) G.team[k] -= v;
   const b = World.bench, bx = b.x + 32, by = b.y + 44;
   switch (r.id) {
     case 'bandage': G.team.band++; break;
     case 'molotov': G.items.push({ cat: 't', kind: 'molotov', x: bx, y: by, held: false, fly: false }); break;
-    case 'ammo': G.team.ammo += 6; break;
-    case 'repair': p.weapon.dur = WEAPONS[p.weapon.type].durab; break;
+    case 'ammo': G.team.ammo += 8; break;
+    case 'repair': p.weapon.dur = wMax(p.weapon); break;
+    case 'medkit': G.team.band += 2; break;
+    case 'xammo': G.team.xammo += 4; break;
+    case 'upg_dmg': p.weapon.up = (p.weapon.up || 0) + 1; break;
+    case 'upg_tough': p.weapon.tough = 1; p.weapon.dur = wMax(p.weapon); break;
+    case 'upg_mag': p.weapon.bigmag = true; break;
+    case 'sawnoff': p.weapon = Object.assign({}, p.weapon, { type: 'sawnoff', dur: WEAPONS.sawnoff.durab, mag: Math.min(p.weapon.mag || 0, 2), xmag: Math.min(p.weapon.xmag || 0, 2) }); break;
+    case 'machete': case 'hammer': case 'crossbow': G.items.push({ cat: 'w', type: r.id, dur: WEAPONS[r.id].durab, x: bx, y: by, held: false, fly: false }); break;
+    case 'knuckles': p.knuckles = true; break;
+    case 'g_helmet': case 'g_boots': case 'g_vest': { const id = r.id.slice(2); G.items.push({ cat: 'g', id, dur: GEAR[id].dur, x: bx, y: by, held: false, fly: false }); break; }
     case 'spiked': p.weapon = { type: 'spiked', dur: WEAPONS.spiked.durab }; break;
     case 'bomb': G.items.push({ cat: 't', kind: 'bomb', x: bx, y: by, held: false, fly: false }); break;
     case 'armor': p.armor = 120; break;

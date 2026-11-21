@@ -107,6 +107,17 @@ function drawVehicle(ctx, v) {
   const s = Art.s[v.spr], fl = Math.cos(v.ang) < 0 ? -1 : 1;
   const bob = Math.abs(v.spd) > 30 ? Math.sin(G.t * 30) * 0.8 : 0;
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(v.x, v.y + v.h / 2, v.w / 2 + 8, 10, 0, 0, TAU); ctx.fill();
+  // вид: сбоку (влево/вправо), спереди (едет вниз) или сзади (едет вверх) — машина разворачивается
+  const sn = Math.sin(v.ang), view = sn > 0.62 ? 'front' : sn < -0.62 ? 'back' : 'side';
+  if (view !== 'side') {
+    const sv = Art.s[v.spr + '_' + view], img = v.flash > 0 ? flashOf(sv) : sv;
+    ctx.save(); ctx.translate(v.x, v.y + 16 + bob); ctx.rotate(Math.cos(v.ang) * (view === 'front' ? -0.12 : 0.12));
+    ctx.drawImage(img.c, -img.ax, -img.ay, img.w, img.h);
+    // головы в стекле (лобовом или заднем)
+    const wy = view === 'front' ? -8 : -54;
+    [v.driver, v.pass].forEach((q, k) => { if (!q || !Puppet.ready) return; const h = Puppet.P[q.i].head, sc = HERO_SCALE * 0.7; ctx.save(); ctx.beginPath(); ctx.rect(-21, wy + 1, 42, 10); ctx.clip(); ctx.drawImage(h.c, (k ? 12 : -12) - h.w * sc / 2, wy + 12 - h.h * sc, h.w * sc, h.h * sc); ctx.restore(); });
+    ctx.restore();
+  } else {
   const oy = v.spr === 'tractor' ? 0 : 26;
   ctx.save(); ctx.translate(v.x, v.y - v.h / 2 + oy + bob); ctx.scale(fl, 1); ctx.rotate(Math.sin(v.ang) * fl * 0.05);
   const img = v.flash > 0 ? flashOf(s) : s;
@@ -114,5 +125,6 @@ function drawVehicle(ctx, v) {
   // головы героев в окнах
   [v.driver, v.pass].forEach((q, k) => { if (!q || !Puppet.ready) return; const h = Puppet.P[q.i].head, sc = HERO_SCALE * 0.8; ctx.drawImage(h.c, (k ? -22 : 14) - h.w * sc / 2, VEH_HEAD[v.spr] - h.h * sc, h.w * sc, h.h * sc); });
   ctx.restore();
+  }
   if (v.hp < v.maxHp) { const k = v.hp / v.maxHp; ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(v.x - 25, v.y - 74, 50, 6); ctx.fillStyle = k > 0.4 ? '#c9b46a' : '#d6493a'; ctx.fillRect(v.x - 24, v.y - 73, 48 * k, 4); }
 }

@@ -123,11 +123,78 @@ function armor() {
     inner: line('M-7 -8L7 -8M-7 -2L7 -2', 1, '#3a3c38') + dot(-5, -11, 0.9, '#b0b4ac') + dot(5, -11, 0.9, '#b0b4ac') + `<rect x="-9" y="0" width="18" height="3" fill="#6b4429"/>` });
   return svg(-13, -19, 26, 25, s);
 }
+
+// ----- Новое оружие -----
+function machete() {
+  let s = shape(smooth([[8, -2.2, 1], [30, -3.4], [40, -5.4], [44, -3, 1], [40, 1.4], [30, 2.4], [8, 2, 1]]), steel, { sw: 1.1, sh: [0.8, 1], nohatch: true, inner: line('M10 -0.6L38 -2.6', 0.6, '#fff', 0.6) });
+  s += shape(smooth([[-4, -2.2, 1], [8, -2.4, 1], [8, 2.4, 1], [-4, 2.2, 1], [-5, 0]]), '#2a2a2a', { sw: 1, nohatch: true }) + dot(0, 0, 0.7, '#c9a65a') + dot(5, 0, 0.7, '#c9a65a');
+  return svg(-7, -8, 54, 13, s);
+}
+function fireaxe() {
+  let s = shape(smooth([[-2, -1.8, 1], [42, -1.6, 1], [42, 1.6, 1], [-2, 1.8, 1]]), '#b8322a', { sw: 1.2, sh: [1, 1.2], inner: line('M2 -0.4L40 -0.4', 0.6, '#e87a60', 0.7) });
+  s += tape(-2, 7, 2);
+  s += shape(smooth([[34, -2.2, 1], [34, -7], [38, -15, 1], [47, -16, 1], [45, -7], [44, 2, 1], [38, 2, 1]]), '#c8ccd0', { sw: 1.3, sh: [1.6, 1.4], inner: line('M39 -14.4L46 -15.2', 1.1, '#fff', 0.9) });
+  s += shape(poly([[34, 2], [30, 9], [34, 8], [38, 2]]), '#8e9396', { sw: 1, flat: true, nodrop: true });
+  return svg(-5, -19, 55, 31, s);
+}
+function shovel() {
+  let s = shape(smooth([[-2, -1.6, 1], [32, -1.4, 1], [32, 1.4, 1], [-2, 1.6, 1]]), wood, { sw: 1.2, sh: [1, 1.2] });
+  s += shape(rect(-5, -3.4, 5, 6.8), '#3a3030', { sw: 1, flat: true, nodrop: true });
+  s += shape(smooth([[31, -3, 1], [34, -6], [46, -7, 1], [50, 0], [46, 7, 1], [34, 6], [31, 3, 1]]), '#7a7e80', { sw: 1.3, sh: [1.6, 1.4], inner: line('M35 -4L46 -4.6', 0.9, '#c4c8ca', 0.8) + `<path d="${ell(42, 2, 3, 1.6)}" fill="#6a4a2a" fill-opacity="0.6"/>` });
+  return svg(-8, -10, 61, 20, s);
+}
+function hammer() {
+  let s = shape(smooth([[-2, -1.5, 1], [26, -1.4, 1], [26, 1.4, 1], [-2, 1.5, 1]]), wood, { sw: 1.2, sh: [1, 1.2] });
+  s += tape(-2, 6, 1.8);
+  s += shape(smooth([[23, -7, 1], [31, -7, 1], [31, 6, 1], [23, 6, 1]]), '#5e6264', { sw: 1.3, sh: [1.6, 1.6], inner: line('M24 -5L30 -5', 0.9, '#a0a4a6', 0.8) });
+  s += shape(poly([[23, -5], [17, -9], [19, -6], [23, -3]]), '#5e6264', { sw: 1, flat: true, nodrop: true });
+  return svg(-5, -11, 40, 20, s);
+}
+function hockey() {
+  let s = shape(smooth([[-2, -1.6, 1], [36, -1.6], [40, -1], [46, 4, 1], [44, 6.4, 1], [36, 2], [-2, 1.6, 1]]), '#c8a070', { sw: 1.2, sh: [1, 1.2], inner: line('M6 -0.3L34 -0.3', 0.5, '#7a5a3a', 0.6) });
+  s += tape(-2, 8, 2) + tape(37, 43, 1.6);
+  return svg(-5, -6, 56, 16, s);
+}
+function revolver() {
+  let s = shape(smooth([[-2, -3, 1], [8, -3, 1], [8, -2], [24, -2, 1], [24, 0.6, 1], [8, 0.6], [8, 2.2], [4, 3], [1, 3], [-1, 8, 1], [-5, 8, 1], [-3, 1]]), '#5a5c60', { sw: 1.2, sh: [1, 1.2], nohatch: true,
+    inner: line('M8 -1L23 -1', 0.6, '#b8bcc0', 0.8) });
+  s += shape(rect(2, -4, 6, 6), '#46484c', { sw: 1, flat: true, nodrop: true, inner: line('M3.5 -3L3.5 1M6.5 -3L6.5 1', 0.5, '#8a8e92') });
+  s += shape(smooth([[-1, 2], [-5, 8, 1], [-1, 8, 1], [2, 3]]), '#6a4a30', { sw: 0.8, flat: true, nodrop: true });
+  return svg(-8, -7, 35, 18, s);
+}
+function rifle() {
+  let s = shape(smooth([[-12, -1, 1], [0, -2.6], [14, -2.8, 1], [58, -2.4, 1], [58, -0.4, 1], [14, 1.2, 1], [8, 3.6], [0, 3.6], [-12, 5.4, 1], [-14, 2]]), '#7a5432', { sw: 1.2, sh: [1.2, 1.2] });
+  s += shape(rect(14, -3.4, 44, 2), '#3a3c40', { sw: 0.9, flat: true, nodrop: true });
+  s += shape(rect(18, -7.6, 18, 3.2), '#2a2c30', { sw: 0.9, flat: true, nodrop: true, inner: `<path d="${ell(19.4, -6, 1.2, 1.4)}" fill="#7aa8c8"/>` });
+  s += line('M6 1Q8 5 11 2', 0.8, INK);
+  return svg(-16, -10, 78, 18, s);
+}
+function sawnoff() {
+  let s = shape(smooth([[-6, -1, 1], [0, -2.6], [8, -3, 1], [28, -3, 1], [28, 1.8, 1], [8, 1.8], [4, 4], [0, 4], [-6, 7, 1], [-8, 3]]), '#6a4a30', { sw: 1.2, sh: [1.2, 1.2] });
+  s += shape(rect(8, -3.6, 20, 2.4), '#3a3c40', { sw: 0.9, flat: true, nodrop: true }) + shape(rect(8, -1.2, 20, 2.4), '#46484c', { sw: 0.9, flat: true, nodrop: true });
+  return svg(-11, -7, 43, 16, s);
+}
+function crossbow() {
+  let s = shape(smooth([[-6, -1.6, 1], [30, -1.6, 1], [30, 1.6, 1], [-6, 2.4, 1], [-8, 0]]), '#6a4a30', { sw: 1.2, sh: [1, 1.2] });
+  s += line('M26 -14Q34 0 26 14', 2.8, INK) + line('M26 -14Q34 0 26 14', 1.6, '#8a6a44');
+  s += line('M26 -14L14 0L26 14', 0.7, '#e8e0c8');
+  s += shape(poly([[8, -0.8], [36, -0.8], [40, 0], [36, 0.8], [8, 0.8]]), '#c8c0a8', { sw: 0.7, flat: true, nodrop: true });
+  s += shape(poly([[3, 1.6], [6, 6], [8, 6], [7, 1.6]]), '#3a3030', { sw: 0.8, flat: true, nodrop: true });
+  return svg(-11, -17, 54, 34, s);
+}
+function xammo() {
+  let s = shape(rect(-9, -10, 18, 12), '#8a3a24', { sw: 1.2, sh: [1.4, 1.4] });
+  for (const x of [-6, -2, 2, 6]) s += shape(smooth([[x - 1.4, -10], [x - 1.4, -15], [x, -17, 1], [x + 1.4, -15], [x + 1.4, -10]]), '#e8b040', { sw: 0.7, flat: true, nodrop: true }) + dot(x, -15.8, 0.8, '#e04020');
+  s += line('M-6 -4L6 -4', 1.2, '#f0d080');
+  return svg(-12, -20, 24, 24, s);
+}
 function build(out) {
   out.food = food(); out.bomb = bomb(); out.armor = armor();
   out.w_bat = bat(false); out.w_spiked = bat(true); out.w_knife = knife(); out.w_axe = axe(); out.w_pipe = pipe();
   out.w_board = board(); out.w_sledge = sledge(); out.w_crowbar = crowbar(); out.w_chair = chair();
   out.w_pistol = pistol(); out.w_shotgun = shotgun();
+  out.w_machete = machete(); out.w_fireaxe = fireaxe(); out.w_shovel = shovel(); out.w_hammer = hammer(); out.w_hockey = hockey();
+  out.w_revolver = revolver(); out.w_rifle = rifle(); out.w_sawnoff = sawnoff(); out.w_crossbow = crossbow(); out.xammo = xammo();
   out.molotov = molotov(); out.tknife = tknife();
   out.cloth = cloth(); out.fuel = fuel(); out.ammo = ammo();
 }

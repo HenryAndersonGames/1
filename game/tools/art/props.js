@@ -321,6 +321,43 @@ function car(col, seed) {
   return svg(-5, -30, 123, 86, s);
 }
 
+
+// машина спереди / сзади (едет вниз / вверх по экрану): (0,0) — центр под машиной
+function carV(col, seed, front) {
+  let s = '';
+  // колёса по бокам
+  for (const x of [-29, 25]) for (const y of [-44, 4]) s += shape(rect(x, y, 6, 16), '#1c1816', { sw: 1, flat: true, nodrop: true });
+  // крыша и капот сверху (длинный корпус уходит вглубь)
+  s += shape(smooth([[-27, -62, 1], [27, -62, 1], [28, 4, 1], [-28, 4, 1]]), col, { sh: [3, 3], sw: 1.3, hgap: 2.4 });
+  const gy = front ? -8 : -54; // стекло ближе к «носу» спереди, к багажнику сзади
+  s += shape(poly([[-22, gy], [22, gy], [20, gy + 12], [-20, gy + 12]]), '#18202a', { sw: 1, flat: true, nodrop: true, inner: line(`M-14 ${gy + 2}L-6 ${gy + 10}`, 0.7, '#7a9aaa', 0.9) });
+  s += shape(rect(-20, front ? -50 : -36, 40, 26), light(col, 0.08), { sw: 1, nodrop: true, sh: [2, 2] });
+  // торец: бампер, фары/фонари, номер
+  s += shape(poly([[-28, 4], [28, 4], [28, 22], [24, 26], [-24, 26], [-28, 22]]), dark(col, 0.2), { sh: [2, 2], sw: 1.3, hgap: 2 });
+  if (front) {
+    s += shape(rect(-22, 8, 10, 6), '#f0e4b0', { sw: 0.8, flat: true, nodrop: true }) + shape(rect(12, 8, 10, 6), '#f0e4b0', { sw: 0.8, flat: true, nodrop: true });
+    s += line('M-8 10L8 10M-8 13L8 13M-8 16L8 16', 1, '#1a1410', 0.8);
+  } else {
+    s += shape(rect(-24, 8, 8, 5), '#c83a2a', { sw: 0.8, flat: true, nodrop: true }) + shape(rect(16, 8, 8, 5), '#c83a2a', { sw: 0.8, flat: true, nodrop: true });
+    s += shape(rect(-7, 12, 14, 6), '#e8e4d8', { sw: 0.7, flat: true, nodrop: true });
+  }
+  s += shape(rect(-29, 20, 58, 5), '#3a3634', { sw: 1, flat: true, nodrop: true });
+  for (const [x, y, rx, ry] of [[-10, -30, 5, 3], [14, -14, 4, 3]]) s += `<path d="${ell(x, y, rx, ry)}" fill="#7a3a1e" fill-opacity="0.7"/>`;
+  return svg(-34, -68, 68, 98, s);
+}
+function tractorV(front) {
+  let s = '';
+  for (const x of [-34, 22]) s += shape(rect(x, -40, 12, 34), '#1c1a18', { sw: 1.2, flat: true, inner: line(`M${x + 2} -36L${x + 10} -32M${x + 2} -28L${x + 10} -24M${x + 2} -20L${x + 10} -16`, 1, '#3a3632') });
+  for (const x of [-24, 16]) s += shape(rect(x, front ? 0 : -60, 8, 16), '#1c1a18', { sw: 1, flat: true });
+  s += shape(rect(-18, -64, 36, 70), '#b8402a', { sh: [3, 3], sw: 1.3 });
+  s += shape(rect(-14, front ? -62 : -30, 28, 26), '#2a2a2a', { sw: 1, flat: true, nodrop: true, inner: line('M-10 -50L10 -50', 1, '#6a6a6a') });
+  s += shape(poly([[-18, 6], [18, 6], [16, 20], [-16, 20]]), '#8a2e1e', { sw: 1.2, sh: [2, 2] });
+  if (front) s += shape(rect(-12, 9, 24, 7), '#3a3630', { sw: 0.8, flat: true, nodrop: true, inner: line('M-10 11L10 11M-10 14L10 14', 0.8, '#1a1410') });
+  else s += shape(rect(-6, 10, 12, 5), '#c83a2a', { sw: 0.8, flat: true, nodrop: true });
+  s += line('M8 -64L8 -76', 3, INK) + line('M8 -64L8 -76', 1.6, '#6a6a6a');
+  return svg(-40, -80, 80, 104, s);
+}
+
 // ================= Ловушка, костёр, предметы =================
 function trap() {
   let s = '';
@@ -464,6 +501,8 @@ function build(out) {
   out.stake = stake(1);
   out.crate = crate(); out.cabinet = cabinet(); out.table = table(); out.loot = loot(); out.bench = bench();
   out.car0 = car('#5b4a3a', 1); out.car1 = car('#3f4a4c', 2); out.car2 = car('#5a3a34', 3);
+  [['car0', '#5b4a3a'], ['car1', '#3f4a4c'], ['car2', '#5a3a34']].forEach(([n, c], i) => { out[n + '_front'] = carV(c, i, true); out[n + '_back'] = carV(c, i, false); });
+  out.tractor_front = tractorV(true); out.tractor_back = tractorV(false);
   out.trap = trap(); out.fire_ring = fireRing(); out.fire_logs = fireLogs();
   for (let k = 0; k < 4; k++) out[`flame${k}`] = flame(k);
   out.brick = brick(); out.bottle = bottle(); out.wood = woodPickup(); out.scrap = scrapPickup(); out.med = medPickup();

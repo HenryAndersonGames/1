@@ -163,6 +163,9 @@ function useAbilityExtra(p, id) {
 }
 function updateExtras(dt) {
   for (const p of G.players) {
+    // перезарядка огнестрела; если не стреляешь 2.5 с — дозаряжает неполный магазин сам
+    if (p.reloadT > 0) { p.reloadT -= dt; if (p.reloadT <= 0) finishReload(p); }
+    else if (WEAPONS[p.weapon.type].gun && p.state === 'normal') { p.idleGun = (p.idleGun || 0) + dt; if (p.idleGun > 2.5 && p.weapon.mag !== undefined && p.weapon.mag < magSize(p.weapon) && G.team.ammo + G.team.xammo > 0) { p.idleGun = 0; startReload(p); } }
     if (p.rageT > 0) { p.rageT -= dt; if (Math.random() < dt * 14) part(p.x + rand(-10, 10), p.y, rand(20, 70), 0, 0, 40, 0.5, '#ff6040', 2.5, -80); }
     if (p.stoneT > 0) p.stoneT -= dt;
     if (p.regenAb > 0 && alive(p)) { p.regenAb -= dt; p.hp = Math.min(p.maxHp, p.hp + 4 * dt); if (Math.random() < dt * 8) part(p.x + rand(-10, 10), p.y, rand(10, 60), 0, 0, 50, 0.6, '#9fe39a', 2.5, -90); }

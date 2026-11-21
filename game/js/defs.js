@@ -15,8 +15,20 @@ const WEAPONS = {
   chair: { name: 'Стул', durab: 7, improvised: true, L: { dmg: 14, reach: 60, arc: 1.2, dur: 0.32, hit: 0.12, kb: 220 }, H: { dmg: 32, reach: 66, arc: 1.4, wind: 0.42, rec: 0.3, kb: 520, stun: 0.9 } },
   crowbar: { name: 'Монтировка', durab: 80, pry: true, L: { dmg: 16, reach: 62, arc: 1.0, dur: 0.28, hit: 0.1, kb: 150 }, H: { dmg: 32, reach: 66, arc: 1.1, wind: 0.36, rec: 0.3, kb: 360, stun: 0.6 } },
   sledge: { name: 'Кувалда', durab: 45, L: { dmg: 22, reach: 72, arc: 1.0, dur: 0.44, hit: 0.18, kb: 240 }, H: { dmg: 72, reach: 80, arc: 1.5, wind: 0.75, rec: 0.45, kb: 620, stun: 1.1, aoe: true } },
-  pistol: { name: 'Пистолет', durab: 200, gun: { dmg: 30, rate: 0.32, spread: 0.04, range: 560, pellets: 1, noise: 520 }, L: { dur: 0.2 }, H: { dmg: 14, reach: 50, arc: 0.9, wind: 0.24, rec: 0.2, kb: 220, stun: 0.5 } },
-  shotgun: { name: 'Дробовик', durab: 120, gun: { dmg: 13, rate: 0.85, spread: 0.32, range: 360, pellets: 6, noise: 720 }, L: { dur: 0.4 }, H: { dmg: 22, reach: 58, arc: 1.0, wind: 0.3, rec: 0.25, kb: 380, stun: 0.7 } },
+  // ----- холодное (новое) -----
+  machete: { name: 'Мачете', durab: 75, L: { dmg: 22, reach: 64, arc: 1.0, dur: 0.24, hit: 0.09, kb: 110 }, H: { dmg: 46, reach: 70, arc: 1.1, wind: 0.3, rec: 0.22, kb: 200, stun: 0.4, back: 1.5 } },
+  fireaxe: { name: 'Пожарный топор', durab: 70, chop: 3, L: { dmg: 26, reach: 72, arc: 1.0, dur: 0.38, hit: 0.15, kb: 200 }, H: { dmg: 70, reach: 80, arc: 1.2, wind: 0.6, rec: 0.4, kb: 480, stun: 0.8 } },
+  shovel: { name: 'Лопата', durab: 60, L: { dmg: 18, reach: 76, arc: 1.1, dur: 0.32, hit: 0.12, kb: 220 }, H: { dmg: 42, reach: 82, arc: 1.3, wind: 0.45, rec: 0.32, kb: 540, stun: 0.9 } },
+  hammer: { name: 'Молот', durab: 90, L: { dmg: 20, reach: 56, arc: 0.9, dur: 0.24, hit: 0.09, kb: 160 }, H: { dmg: 50, reach: 60, arc: 1.0, wind: 0.36, rec: 0.26, kb: 380, stun: 1.0 } },
+  hockey: { name: 'Клюшка', durab: 40, L: { dmg: 15, reach: 82, arc: 1.1, dur: 0.26, hit: 0.1, kb: 270 }, H: { dmg: 34, reach: 86, arc: 1.3, wind: 0.36, rec: 0.28, kb: 620, stun: 0.6 } },
+  // ----- огнестрел: магазин + перезарядка, урон намного выше ближнего боя -----
+  // gun: dmg (за пулю/дробину), rate (между выстрелами), mag, reload (с), pellets, spread, range, pierce (пробивает N врагов), kb
+  pistol: { name: 'Пистолет', durab: 200, gun: { dmg: 42, rate: 0.36, mag: 8, reload: 1.3, spread: 0.04, range: 560, pellets: 1, noise: 520, kb: 180, stun: 0.2 }, L: { dur: 0.2 }, H: { dmg: 14, reach: 50, arc: 0.9, wind: 0.24, rec: 0.2, kb: 220, stun: 0.5 } },
+  revolver: { name: 'Револьвер', durab: 180, gun: { dmg: 78, rate: 0.62, mag: 6, reload: 2.0, spread: 0.03, range: 600, pellets: 1, noise: 620, kb: 320, stun: 0.45 }, L: { dur: 0.3 }, H: { dmg: 16, reach: 50, arc: 0.9, wind: 0.24, rec: 0.2, kb: 240, stun: 0.5 } },
+  shotgun: { name: 'Дробовик', durab: 120, gun: { dmg: 30, rate: 1.05, mag: 5, reload: 2.2, spread: 0.26, range: 340, pellets: 7, noise: 760, kb: 120, stun: 0.5 }, L: { dur: 0.45 }, H: { dmg: 22, reach: 58, arc: 1.0, wind: 0.3, rec: 0.25, kb: 380, stun: 0.7 } },
+  sawnoff: { name: 'Обрез', durab: 90, gun: { dmg: 30, rate: 0.35, mag: 2, reload: 1.7, spread: 0.46, range: 220, pellets: 9, noise: 760, kb: 130, stun: 0.6 }, L: { dur: 0.35 }, H: { dmg: 20, reach: 52, arc: 1.0, wind: 0.28, rec: 0.22, kb: 360, stun: 0.7 } },
+  rifle: { name: 'Охотничье ружьё', durab: 150, gun: { dmg: 140, rate: 1.3, mag: 5, reload: 2.4, spread: 0.01, range: 900, pellets: 1, pierce: 3, noise: 900, kb: 420, stun: 0.6 }, L: { dur: 0.5 }, H: { dmg: 22, reach: 64, arc: 1.0, wind: 0.32, rec: 0.26, kb: 400, stun: 0.7 } },
+  crossbow: { name: 'Арбалет', durab: 120, gun: { dmg: 110, rate: 0.5, mag: 1, reload: 1.2, spread: 0.01, range: 650, pellets: 1, pierce: 2, noise: 60, kb: 260, stun: 0.4, bolt: true }, L: { dur: 0.3 }, H: { dmg: 18, reach: 56, arc: 1.0, wind: 0.3, rec: 0.24, kb: 300, stun: 0.6 } },
 };
 
 // Метательное (держится в руках, любая атака = бросок)
@@ -29,6 +41,7 @@ const THROWN = {
 };
 
 const RES = {
+  xammo: { name: 'Разрывные', col: '#ff9a5a' },
   wood: { name: 'Дерево', col: '#e6cfa0' }, scrap: { name: 'Хлам', col: '#c8d2d8' }, cloth: { name: 'Ткань', col: '#d8c8a8' },
   fuel: { name: 'Топливо', col: '#e08a6a' }, ammo: { name: 'Патроны', col: '#e0c070' }, food: { name: 'Еда', col: '#e8b08a' },
 };
@@ -59,14 +72,27 @@ const SKILLS = [
 
 // ===== Крафт на верстаке =====
 const RECIPES = [
-  { id: 'bandage', name: 'Бинт', cost: { cloth: 2 }, desc: '+1 бинт (LT / H)' },
-  { id: 'molotov', name: 'Коктейль Молотова', cost: { cloth: 1, fuel: 1 }, desc: 'Поджигает область' },
-  { id: 'ammo', name: 'Патроны ×6', cost: { scrap: 2 }, eng: 2, desc: 'Нужна Инженерия 2' },
+  { id: 'bandage', name: 'Бинт', cost: { cloth: 2 }, desc: '+1 бинт' },
+  { id: 'medkit', name: 'Аптечка', cost: { cloth: 3, food: 1 }, desc: '+2 бинта сразу' },
+  { id: 'ammo', name: 'Патроны ×8', cost: { scrap: 2 }, eng: 1, desc: 'Для любого огнестрела. Инженерия 1' },
+  { id: 'xammo', name: 'Разрывные патроны ×4', cost: { scrap: 2, fuel: 1 }, eng: 3, desc: 'Взрываются при попадании. Заряжаются первыми. Инж. 3' },
+  { id: 'upg_dmg', name: 'Улучшить оружие: урон', cost: { scrap: 3, wood: 1 }, eng: 1, desc: '+25% урона оружию в руках (до +3)' },
+  { id: 'upg_tough', name: 'Улучшить оружие: прочность', cost: { scrap: 1, cloth: 2 }, desc: 'Обмотка и скобы: +50% прочности, починка' },
+  { id: 'upg_mag', name: 'Улучшить огнестрел: магазин', cost: { scrap: 4 }, eng: 4, desc: '+50% патронов в магазине. Инж. 4' },
   { id: 'repair', name: 'Починить оружие в руках', cost: { scrap: 2 }, desc: 'Полная прочность' },
   { id: 'spiked', name: 'Бита с гвоздями', cost: { scrap: 3 }, eng: 2, need: 'bat', desc: 'Нужна бита в руках и Инж. 2' },
-  { id: 'tknife', name: 'Метательные ножи ×2', cost: { scrap: 2 }, eng: 1, desc: 'Нужна Инженерия 1' },
+  { id: 'sawnoff', name: 'Обрез из дробовика', cost: { scrap: 1 }, eng: 2, need: 'shotgun', desc: 'Короче, шире разлёт, 2 выстрела подряд. Нужен дробовик' },
+  { id: 'machete', name: 'Мачете', cost: { scrap: 4, wood: 1 }, eng: 2, desc: 'Быстрое и острое. Инженерия 2' },
+  { id: 'hammer', name: 'Молот', cost: { scrap: 3, wood: 1 }, eng: 1, desc: 'Сильно оглушает. Инженерия 1' },
+  { id: 'crossbow', name: 'Арбалет', cost: { wood: 3, scrap: 3, cloth: 1 }, eng: 4, desc: 'Бесшумный, пробивает двоих. Инж. 4' },
+  { id: 'knuckles', name: 'Кастет', cost: { scrap: 2 }, desc: 'Удары кулаками ×1.8 (навсегда)' },
+  { id: 'tknife', name: 'Метательные ножи ×2', cost: { scrap: 2 }, eng: 1, desc: 'Инженерия 1' },
+  { id: 'molotov', name: 'Коктейль Молотова', cost: { cloth: 1, fuel: 1 }, desc: 'Поджигает область' },
   { id: 'bomb', name: 'Самодельная бомба', cost: { scrap: 2, fuel: 1 }, eng: 3, desc: 'Взрыв через секунду. Инженерия 3' },
   { id: 'armor', name: 'Самодельная броня', cost: { scrap: 4, cloth: 2 }, eng: 3, desc: '−35% урона, пока цела. Инженерия 3' },
+  { id: 'g_helmet', name: 'Каска', cost: { scrap: 3, cloth: 1 }, eng: 2, desc: '−15% урона. Инженерия 2' },
+  { id: 'g_boots', name: 'Берцы', cost: { cloth: 2, scrap: 1 }, desc: '+8% скорости' },
+  { id: 'g_vest', name: 'Бронежилет', cost: { scrap: 6, cloth: 3 }, eng: 4, desc: '−26% урона. Инженерия 4' },
 ];
 
 // ===== Добыча по зонам =====
@@ -78,6 +104,11 @@ const LOOT = {
   farm: [[4, 'r:food'], [3, 'r:wood'], [3, 'r:cloth'], [2, 'r:fuel'], [0.6, 'w:axe'], [0.4, 'w:shotgun'], [1, 'band']],
   lab: [[0.6, 'armor'], [3, 'band'], [2, 'r:ammo'], [2, 'r:scrap'], [0.6, 'w:shotgun'], [0.6, 'w:pistol'], [1, 'r:cloth']],
 };
+LOOT.town.push([0.4, 'w:machete'], [0.3, 'w:hammer'], [0.3, 'w:hockey'], [0.25, 'w:revolver'], [0.5, 'r:xammo']);
+LOOT.industrial.push([0.4, 'w:fireaxe'], [0.4, 'w:shovel'], [0.4, 'w:hammer'], [0.2, 'w:sawnoff'], [0.4, 'r:xammo']);
+LOOT.farm.push([0.5, 'w:shovel'], [0.3, 'w:rifle'], [0.3, 'w:machete']);
+LOOT.lab.push([0.3, 'w:rifle'], [0.3, 'w:revolver'], [0.5, 'r:xammo']);
+LOOT.forest.push([0.2, 'w:machete'], [0.15, 'w:shovel']);
 LOOT.village = LOOT.town; LOOT.depot = LOOT.industrial; LOOT.camp = LOOT.farm;
 function rollLoot(zone) {
   const t = LOOT[zone] || LOOT.forest;
@@ -125,7 +156,7 @@ MOVESETS.fists = Object.assign({}, MOVESETS.blunt, {
   L3: { name: 'Пинок', base: 'L', k: 1.6, wind: 0.1, act: 0.08, rec: 0.25, arc: 0.9, sw: [0, 0], pose: 'H', kb: 2.4, mar: 1, next: { L: 'L1' } },
   LH: { name: 'Плечом вперёд', base: 'H', k: 0.8, wind: 0.12, act: 0.2, rec: 0.3, arc: 0.9, sw: [0, 0], pose: 'thrust', lunge: 460, kb: 1.6, mar: 1, next: {} },
 });
-const WCLASS = { fists: 'fists', bat: 'blunt', spiked: 'blunt', pipe: 'blunt', board: 'blunt', chair: 'blunt', crowbar: 'blunt', knife: 'blade', axe: 'heavy', sledge: 'heavy', pistol: 'blunt', shotgun: 'blunt' };
+const WCLASS = { machete: 'blade', fireaxe: 'heavy', shovel: 'blunt', hammer: 'blunt', hockey: 'blunt', revolver: 'blunt', rifle: 'blunt', sawnoff: 'blunt', crossbow: 'blunt', fists: 'fists', bat: 'blunt', spiked: 'blunt', pipe: 'blunt', board: 'blunt', chair: 'blunt', crowbar: 'blunt', knife: 'blade', axe: 'heavy', sledge: 'heavy', pistol: 'blunt', shotgun: 'blunt' };
 
 // ===== Особые способности — назначаются на 3 кнопки =====
 const ABIL = {

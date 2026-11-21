@@ -23,7 +23,7 @@ function newGame(solo = G.solo) {
   MM.dirty = true; MM.seen = null;
   const f = World.fire;
   Object.assign(G, { t: 0, day: 1, phase: 'day', phaseT: 0, kills: 0, overT: 0, zoneShown: {} });
-  G.team = { wood: 4, scrap: 2, cloth: 1, fuel: 1, ammo: 0, band: 1, food: 2 };
+  G.team = { wood: 4, scrap: 2, cloth: 1, fuel: 1, ammo: 0, xammo: 0, band: 1, food: 2 };
   G.players = G.solo ? [makePlayer(0, f.x, f.y - 50)] : [makePlayer(0, f.x - 50, f.y - 50), makePlayer(1, f.x + 50, f.y - 50)];
   if (G.players[1]) G.players[1].weapon = { type: 'pipe', dur: WEAPONS.pipe.durab };
   if (G.solo) G.team.band = 2;

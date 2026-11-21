@@ -300,7 +300,7 @@ function attackU(p) {
   return { u: 4 + q * 2, ph: 'r', q };
 }
 function weaponLen(p) { if (p.weapon.type === 'fists') return 6; const w = Art.s['w_' + p.weapon.type]; return w.w - w.ax; }
-const TWO_HAND = new Set(['bat', 'spiked', 'pipe', 'board', 'chair', 'crowbar', 'axe', 'sledge', 'shotgun']);
+const TWO_HAND = new Set(['bat', 'spiked', 'pipe', 'board', 'chair', 'crowbar', 'axe', 'sledge', 'shotgun', 'fireaxe', 'shovel', 'hockey', 'rifle', 'crossbow', 'sawnoff']);
 function drawWeaponAt(ctx, p, grip, wa) {
   if (p.weapon.type === 'fists') return;
   const w = Art.s['w_' + p.weapon.type];
@@ -344,6 +344,7 @@ function drawPlayer(ctx, p) {
   const fl = Math.cos(p.face) < 0 ? -1 : 1;
   const flash = p.hurtT > 0.12;
   drawPlayerAura(ctx, p);
+  if (p.reloadT > 0) { const k = 1 - p.reloadT / p.reloadMax; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(p.x, p.y - 95, 9, 0, TAU); ctx.stroke(); ctx.strokeStyle = '#e0c070'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y - 95, 9, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke(); }
   if (p.inv > 0 && p.state !== 'roll' && p.state !== 'dash' && Math.floor(G.t * 20) % 2) ctx.globalAlpha = 0.55;
   // лежит: без сознания или сбит с ног
   if (p.state === 'downed' || (p.state === 'knock' && p.t > 0.3)) {
@@ -528,7 +529,7 @@ function drawOverlay(ctx, dk) {
     else { ctx.fillStyle = '#e8e4d8'; ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(q.x, q.y - 16, 5, 0, TAU); ctx.fill(); ctx.stroke(); }
   }
   // выстрелы, молнии, волны
-  for (const t of G.tracers) { ctx.strokeStyle = `rgba(255,230,160,${t.t / 0.08})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(t.x0, t.y0); ctx.lineTo(t.x1, t.y1); ctx.stroke(); }
+  for (const t of G.tracers) { ctx.strokeStyle = t.col ? t.col : `rgba(255,230,160,${t.t / 0.08})`; ctx.globalAlpha = t.col ? Math.min(1, t.t / 0.08) : 1; ctx.lineWidth = t.col ? 3 : 2; ctx.beginPath(); ctx.moveTo(t.x0, t.y0); ctx.lineTo(t.x1, t.y1); ctx.stroke(); }
   for (const b of G.bolts) {
     for (const [w, col] of [[6, 'rgba(120,140,255,0.5)'], [2.4, '#f4f0ff']]) {
       ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
@@ -668,7 +669,7 @@ function drawHUD(ctx) {
   for (const p of G.players) drawPlayerHUD(ctx, p, p.i === 0 ? 14 : W - 14, p.i === 0 ? 1 : -1);
   drawClock(ctx, W / 2, 50);
   // ресурсы
-  const items = [['wood', G.team.wood], ['scrap', G.team.scrap], ['cloth', G.team.cloth], ['fuel', G.team.fuel], ['ammo', G.team.ammo], ['food', G.team.food], ['band', G.team.band]];
+  const items = [['wood', G.team.wood], ['scrap', G.team.scrap], ['cloth', G.team.cloth], ['fuel', G.team.fuel], ['ammo', G.team.ammo], ['xammo', G.team.xammo], ['food', G.team.food], ['band', G.team.band]];
   const rw = items.length * 66 + 18, rx = W / 2 - rw / 2, ry = 720 - 48;
   panel(ctx, rx, ry, rw, 38);
   items.forEach(([n, v], i) => { const x = rx + 30 + i * 66; icon(ctx, n, x, ry + 19, 24); inkText(ctx, String(v), x + 16, ry + 26, v > 0 ? '#f2e6c8' : '#8a7e68', 16); });
@@ -818,9 +819,15 @@ function drawPlayerHUD(ctx, p, ax, dir) {
   if (p.weapon.type !== 'fists') {
     const s = Art.s['w_' + p.weapon.type], k = Math.min(40 / s.w, 22 / s.h);
     ctx.save(); ctx.translate(wx, wy); ctx.rotate(-0.7); ctx.drawImage(s.c, -s.w * k / 2, -s.h * k / 2, s.w * k, s.h * k); ctx.restore();
-    if (W.durab < Infinity) { const d = p.weapon.dur / W.durab; ctx.beginPath(); ctx.arc(wx, wy, 27, -Math.PI / 2, -Math.PI / 2 + TAU * d); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = d > 0.3 ? '#b8d080' : '#e06a3a'; ctx.lineWidth = 2.6; ctx.stroke(); }
+    if (W.durab < Infinity) { const d = p.weapon.dur / wMax(p.weapon); ctx.beginPath(); ctx.arc(wx, wy, 27, -Math.PI / 2, -Math.PI / 2 + TAU * d); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = d > 0.3 ? '#b8d080' : '#e06a3a'; ctx.lineWidth = 2.6; ctx.stroke(); }
   } else inkText(ctx, '✊', wx, wy + 8, '#e0c8a4', 22, true, 'center');
-  inkText(ctx, W.gun ? `${W.name} ${G.team.ammo}` : W.name, wx, 82, '#c8bca0', 11, true, 'center');
+  const up = p.weapon.up ? ` +${p.weapon.up}` : '';
+  if (W.gun) {
+    const mg = p.weapon.mag ?? magSize(p.weapon);
+    inkText(ctx, `${W.name}${up}`, wx, 82, '#c8bca0', 11, true, 'center');
+    inkText(ctx, `${mg}/${magSize(p.weapon)}${p.weapon.xmag ? ` (${p.weapon.xmag} разр.)` : ''} · ${G.team.ammo}`, wx, 96, mg ? '#e0c070' : '#ff8a6a', 11, true, 'center');
+    if (p.reloadT > 0) { ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(wx, wy, 30, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - p.reloadT / p.reloadMax)); ctx.stroke(); }
+  } else inkText(ctx, W.name + up + (p.weapon.type === 'fists' && p.knuckles ? ' + кастет' : ''), wx, 82, '#c8bca0', 11, true, 'center');
   // сумка со вторым оружием
   const bx2 = wx + dir * 36, by2 = 62;
   ctx.beginPath(); ctx.arc(bx2, by2, 14, 0, TAU); ctx.fillStyle = '#16110d'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.5; ctx.stroke();
@@ -851,7 +858,7 @@ function drawPlayerHUD(ctx, p, ax, dir) {
   else if (p.stoneT > 0) inkText(ctx, `Камень ${p.stoneT.toFixed(0)}`, X(250), 154, '#c0c4cc', 12, true, dir > 0 ? 'left' : 'right');
   if (p.state === 'atk' && p.comboN >= 2) inkText(ctx, `Комбо ×${p.comboN}`, X(326), 118, '#ffe08a', 15, true, dir > 0 ? 'left' : 'right');
   if (p.menu) drawSkillMenu(ctx, p, dir > 0 ? ax : ax - 600, 168);
-  if (p.craft) drawCraftMenu(ctx, p, dir > 0 ? ax : ax - 330, 168);
+  if (p.craft) drawCraftMenu(ctx, p, dir > 0 ? ax : ax - 380, 168);
 }
 
 // ---------- Древо развития: 6 веток × 8 уровней, способности — прямо в узлах ----------
@@ -891,22 +898,27 @@ function drawSkillMenu(ctx, p, x, my) {
 }
 
 function drawCraftMenu(ctx, p, x, my) {
-  const pal = PAL[p.i], hgt = 50 + RECIPES.length * 40;
-  panel(ctx, x, my, 330, hgt);
+  const pal = PAL[p.i], ROWS = 10, rh = 40, hgt = 64 + ROWS * rh, W = 380;
+  if (x + W > Render.W / (Render.H / 720)) x = Render.W / (Render.H / 720) - W - 14;
+  panel(ctx, x, my, W, hgt);
   inkText(ctx, 'Верстак', x + 14, my + 24, pal.accent, 15);
-  RECIPES.forEach((r, i) => {
-    const yy = my + 32 + i * 40, sel = p.craftSel === i;
-    const can = Object.entries(r.cost).every(([k, v]) => G.team[k] >= v) && (!r.eng || p.sk.eng >= r.eng);
-    if (sel) { ctx.fillStyle = 'rgba(255,230,170,0.1)'; ctx.fillRect(x + 8, yy, 314, 36); ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.strokeRect(x + 8, yy, 314, 36); }
+  inkText(ctx, `${p.craftSel + 1} / ${RECIPES.length}`, x + W - 14, my + 24, '#8f846c', 12, true, 'right');
+  const first = clamp(p.craftSel - 4, 0, Math.max(0, RECIPES.length - ROWS));
+  for (let n = 0; n < ROWS && first + n < RECIPES.length; n++) {
+    const i = first + n, r = RECIPES[i], yy = my + 32 + n * rh, sel = p.craftSel === i;
+    const can = Object.entries(r.cost).every(([k, v]) => G.team[k] >= v) && (!r.eng || p.sk.eng >= r.eng) && (!r.need || p.weapon.type === r.need);
+    if (sel) { ctx.fillStyle = 'rgba(255,230,170,0.1)'; ctx.fillRect(x + 8, yy, W - 16, rh - 4); ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.strokeRect(x + 8, yy, W - 16, rh - 4); }
     if (!can) ctx.globalAlpha = 0.45;
     inkText(ctx, r.name, x + 16, yy + 16, '#f2e6c8', 13);
-    ctx.font = `10px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'left'; ctx.fillText(r.desc, x + 16, yy + 30);
-    let cx = x + 314;
-    for (const [k, v] of Object.entries(r.cost).reverse()) { inkText(ctx, String(v), cx, yy + 23, RES[k].col, 13, true, 'right'); icon(ctx, k, cx - 22, yy + 18, 18); cx -= 46; }
+    ctx.font = `10px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'left'; ctx.fillText(r.desc.length > 52 ? r.desc.slice(0, 50) + '…' : r.desc, x + 16, yy + 30);
+    let cx = x + W - 16;
+    for (const [k, v] of Object.entries(r.cost).reverse()) { inkText(ctx, String(v), cx, yy + 23, RES[k].col, 13, true, 'right'); icon(ctx, k, cx - 22, yy + 18, 18); cx -= 44; }
     ctx.globalAlpha = 1;
-  });
+  }
+  if (first > 0) inkText(ctx, '▲', x + W / 2, my + 32, '#8f846c', 11, true, 'center');
+  if (first + ROWS < RECIPES.length) inkText(ctx, '▼', x + W / 2, my + hgt - 22, '#8f846c', 11, true, 'center');
   ctx.font = `11px ${FONT}`; ctx.fillStyle = '#8f846c'; ctx.textAlign = 'left';
-  ctx.fillText(`${Input.btn(p.i, 'light')} — сделать · ${Input.btn(p.i, 'roll')} — закрыть`, x + 14, my + hgt - 8);
+  ctx.fillText(`▲▼ выбор · ${Input.btn(p.i, 'light')} — сделать · ${Input.btn(p.i, 'roll')} — закрыть`, x + 14, my + hgt - 8);
 }
 
 // ---------- Экраны ----------
