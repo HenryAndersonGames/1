@@ -451,7 +451,8 @@ function computeFlow(targets) {
     });
   }
   dijkstra(C, Nav.dist, targets);
-  dijkstra(CG, Nav.distG, targets);
+  // поле для «пролезающих в окна» считаем, только если такие монстры есть
+  if (G.enemies.some((e) => EDEF[e.type].squeeze && !e.dead)) dijkstra(CG, Nav.distG, targets);
 }
 function flowStep(x, y, squeeze) {
   const gx = Math.floor(x / CELL), gy = Math.floor(y / CELL), D = squeeze ? Nav.distG : Nav.dist, B = Nav.blocked;

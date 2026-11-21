@@ -12,9 +12,11 @@ function initRender() {
   addEventListener('resize', resize);
 }
 
+// Внутреннее разрешение: картинка рисуется в меньший холст и растягивается на экран.
+// На слабых ПК (Windows 7, встроенная графика) это главный выигрыш — пикселей в 2–4 раза меньше.
+const Q_LEVELS = [1080, 900, 720, 600, 480];
 function resize() {
-  const q = G.quality;
-  const h = Math.min(innerHeight, 1080) * q, w = h * innerWidth / innerHeight;
+  const h = Math.min(innerHeight, Q_LEVELS[G.qLevel ?? 2]), w = h * innerWidth / innerHeight;
   Render.W = Render.cv.width = Math.round(w);
   Render.H = Render.cv.height = Math.round(h);
   Render.lc.width = Math.ceil(Render.W / 4); Render.lc.height = Math.ceil(Render.H / 4);
@@ -59,8 +61,6 @@ function render() {
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   for (const p of G.players) if (p.state !== 'dead') { ctx.beginPath(); ctx.ellipse(p.x, p.y, 15, 6, 0, 0, TAU); ctx.fill(); }
   for (const e of G.enemies) if (inView(e.x, e.y) && e.state !== 'cling' && !e.hidden) { const fl = EDEF[e.type].float ? 0.6 : 1; ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r * 1.15 * fl, e.r * 0.45 * fl, 0, 0, TAU); ctx.fill(); }
-  for (const t of World.trees) if (inView(t.x, t.y)) { ctx.beginPath(); ctx.ellipse(t.x + 10, t.y + 2, 46 * t.s, 17 * t.s, 0, 0, TAU); ctx.fill(); }
-  for (const b of World.bushes) if (inView(b.x, b.y)) { ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + 1, 26, 7, 0, 0, TAU); ctx.fill(); }
   for (const p of G.players) if (p.state !== 'dead') {
     ctx.strokeStyle = PAL[p.i].accent; ctx.globalAlpha = 0.55; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.ellipse(p.x, p.y, 19, 8, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
@@ -707,7 +707,7 @@ function buildMinimap() {
   x.fillStyle = '#e8dcc0'; for (const wl of World.walls) x.fillRect(wl.x * k, wl.y * k, Math.max(1, wl.w * k), Math.max(1, wl.h * k));
   for (const p of World.props) if (!p.dead && p.solid && (p.car || p.tall || p.w > 60)) { x.fillStyle = '#9a9488'; x.fillRect(p.x * k, p.y * k, Math.max(1, p.w * k), Math.max(1, p.h * k)); }
   MM.dirty = false;
-  if (!MM.seen) { MM.seen = new Uint8Array(Math.ceil(WORLD_W / MM.cs) * Math.ceil(WORLD_H / MM.cs)); MM.fog = document.createElement('canvas'); MM.fog.width = w; MM.fog.height = h; MM.fogDirty = true; }
+  if (!MM.seen) { MM.fogInit = false; MM.fresh = []; MM.seen = new Uint8Array(Math.ceil(WORLD_W / MM.cs) * Math.ceil(WORLD_H / MM.cs)); MM.fog = document.createElement('canvas'); MM.fog.width = w; MM.fog.height = h; MM.fogDirty = true; }
 }
 function revealMinimap() {
   if (!MM.seen) return;
@@ -717,14 +717,15 @@ function revealMinimap() {
     for (let gy = Math.max(0, Math.floor((p.y - R) / cs)); gy <= Math.floor((p.y + R) / cs); gy++) for (let gx = Math.max(0, Math.floor((p.x - R) / cs)); gx <= Math.min(nx - 1, Math.floor((p.x + R) / cs)); gx++) {
       const i = gy * nx + gx;
       if (i >= MM.seen.length || MM.seen[i]) continue;
-      if (dist2(gx * cs + cs / 2, gy * cs + cs / 2, p.x, p.y) < R * R) { MM.seen[i] = 1; MM.fogDirty = true; }
+      if (dist2(gx * cs + cs / 2, gy * cs + cs / 2, p.x, p.y) < R * R) { MM.seen[i] = 1; MM.fogDirty = true; (MM.fresh || (MM.fresh = [])).push(i); }
     }
   }
   if (MM.fogDirty) {
-    const x = MM.fog.getContext('2d'), k = MM.k; x.clearRect(0, 0, MM.fog.width, MM.fog.height);
-    x.fillStyle = 'rgba(10,9,8,0.9)';
-    for (let i = 0; i < MM.seen.length; i++) if (!MM.seen[i]) x.fillRect((i % nx) * cs * k, Math.floor(i / nx) * cs * k, cs * k + 0.6, cs * k + 0.6);
-    MM.fogDirty = false;
+    // туман рисуется один раз, дальше только «протираются» новые клетки (раньше перерисовывались все ~7000)
+    const x = MM.fog.getContext('2d'), k = MM.k;
+    if (!MM.fogInit) { x.fillStyle = 'rgba(10,9,8,0.9)'; x.fillRect(0, 0, MM.fog.width, MM.fog.height); MM.fogInit = true; MM.fresh = []; for (let i = 0; i < MM.seen.length; i++) if (MM.seen[i]) MM.fresh.push(i); }
+    for (const i of MM.fresh || []) x.clearRect((i % nx) * cs * k - 0.3, Math.floor(i / nx) * cs * k - 0.3, cs * k + 0.6, cs * k + 0.6);
+    MM.fresh = []; MM.fogDirty = false;
   }
 }
 function drawMinimap(ctx, rx, by) {

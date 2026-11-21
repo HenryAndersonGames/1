@@ -92,6 +92,17 @@ function drawPause() {
   drawScreen('Пауза', lines, `День ${G.day} · ${G.phase === 'night' ? 'ночь' : 'день'}`);
 }
 
+// автонастройка: проседает FPS — снижаем внутреннее разрешение, стабильно 60 — поднимаем обратно
+function autoQuality(dt) {
+  if (!G.autoQ || G.state !== 'play' || G.paused) return;
+  const A = autoQuality; A.t = (A.t || 0) + dt;
+  if (A.t < 1) return;
+  A.t = 0;
+  const fps = Render.fps;
+  if (fps < 47) { A.low = (A.low || 0) + 1; A.high = 0; } else if (fps > 58) { A.high = (A.high || 0) + 1; A.low = 0; } else { A.low = 0; A.high = 0; }
+  if (A.low >= 2 && G.qLevel < Q_LEVELS.length - 1) { G.qLevel++; resize(); A.low = 0; }
+  else if (A.high >= 8 && G.qLevel > 1) { G.qLevel--; resize(); A.high = 0; A.cool = 1; }
+}
 function frame(t) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
@@ -100,7 +111,13 @@ function frame(t) {
   if (fpsAcc >= 0.5) { Render.fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0; }
 
   if (G.state !== 'play' || G.paused) Input.update();
-  if (Input.keys.has('F2') && !frame.f2) { G.quality = G.quality === 1 ? 0.75 : G.quality === 0.75 ? 0.5 : 1; resize(); msg(`Качество: ${G.quality * 100}%`); }
+  // F2: Авто → 1080 → 900 → 720 → 600 → 480 → Авто
+  if (Input.keys.has('F2') && !frame.f2) {
+    if (G.autoQ) { G.autoQ = false; G.qLevel = 0; } else if (G.qLevel >= Q_LEVELS.length - 1) { G.autoQ = true; G.qLevel = 2; } else G.qLevel++;
+    resize(); msg(G.autoQ ? 'Качество: авто' : `Качество: ${Q_LEVELS[G.qLevel]}p`);
+  }
+  autoQuality(dt);
+  prebakeChunks();
   frame.f2 = Input.keys.has('F2');
   if (Input.keys.has('F3') && !frame.f3) G.showFps = !G.showFps;
   frame.f3 = Input.keys.has('F3');

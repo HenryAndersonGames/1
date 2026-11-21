@@ -2,7 +2,7 @@
 // ---------- Графика: векторные SVG (js/artdata.js, исходники в art/*.svg) ----------
 // При запуске каждый SVG один раз растрируется в канвас с запасом 2x — дальше только drawImage.
 const OL = '#1a110b';
-const SS = 2;
+const SS = 1.5; // запас резкости спрайтов (2 — чётче, но тяжелее для слабых ПК)
 const Art = { ready: false };
 const PAL = [
   { accent: '#5fc0cf', coatD: '#2f5a64', name: 'Игрок 1' },
@@ -86,7 +86,7 @@ function tile(ctx, s, x, y, w, h) {
 }
 
 // ---------- Земля: чанки 512x512, запекаются по требованию, старые выгружаются ----------
-const CHUNK = 512, MAX_CHUNKS = 28;
+const CHUNK = 512, MAX_CHUNKS = 56;
 function getChunk(cx, cy) {
   const key = cy * 64 + cx;
   let ch = Art.chunks.get(key);
@@ -101,6 +101,14 @@ function getChunk(cx, cy) {
   return ch.c;
 }
 const FLOOR_TILE = { wood: 'floor_wood', stone: 'floor_stone', tile: 'floor_tile', concrete: 'floor_concrete', asphalt: 'floor_asphalt', lab: 'floor_lab', hay: 'floor_hay' };
+// заранее печём участки земли вокруг камеры по одному за кадр — без рывков при беге по карте
+function prebakeChunks() {
+  if (!Art.chunks || !G.players.length || !Render.view) return;
+  const V = Render.view, pad = CHUNK;
+  for (let cy = Math.max(0, Math.floor((V.vy0 - pad) / CHUNK)); cy <= Math.min(Math.ceil(WORLD_H / CHUNK) - 1, Math.floor((V.vy1 + pad) / CHUNK)); cy++)
+    for (let cx = Math.max(0, Math.floor((V.vx0 - pad) / CHUNK)); cx <= Math.min(Math.ceil(WORLD_W / CHUNK) - 1, Math.floor((V.vx1 + pad) / CHUNK)); cx++)
+      if (!Art.chunks.has(cy * 64 + cx)) { getChunk(cx, cy); return; }
+}
 function bakeChunk(cx, cy) {
   const c = document.createElement('canvas'); c.width = CHUNK; c.height = CHUNK;
   const x = c.getContext('2d');
@@ -186,5 +194,9 @@ function bakeChunk(cx, cy) {
   }
   const fire = World.fire;
   if (fire && rectsOverlap(ox, oy, CHUNK, CHUNK, fire.x - 60, fire.y - 60, 120, 120)) { const s = S.fire_ring; x.drawImage(s.c, fire.x - ox - s.ax, fire.y - oy - s.ay, s.w, s.h); }
+  // тени деревьев и кустов запечены в землю (раньше рисовались каждый кадр)
+  x.fillStyle = 'rgba(0,0,0,0.32)';
+  for (const t of World.trees) { if (t.x < ox - 80 || t.x > ox + CHUNK + 80 || t.y < oy - 40 || t.y > oy + CHUNK + 40) continue; x.beginPath(); x.ellipse(t.x + 10 - ox, t.y + 2 - oy, 46 * t.s, 17 * t.s, 0, 0, TAU); x.fill(); }
+  for (const b of World.bushes) { if (b.x < ox - 40 || b.x > ox + CHUNK + 40 || b.y < oy - 20 || b.y > oy + CHUNK + 20) continue; x.beginPath(); x.ellipse(b.x + 3 - ox, b.y + 1 - oy, 26, 7, 0, 0, TAU); x.fill(); }
   return c;
 }

@@ -926,7 +926,8 @@ function computeFlow(targets) {
     });
   }
   dijkstra(C, Nav.dist, targets);
-  dijkstra(CG, Nav.distG, targets);
+  // поле для «пролезающих в окна» считаем, только если такие монстры есть
+  if (G.enemies.some((e) => EDEF[e.type].squeeze && !e.dead)) dijkstra(CG, Nav.distG, targets);
 }
 function flowStep(x, y, squeeze) {
   const gx = Math.floor(x / CELL), gy = Math.floor(y / CELL), D = squeeze ? Nav.distG : Nav.dist, B = Nav.blocked;
@@ -1016,7 +1017,7 @@ const ART_SVG = {"p0_a_slash0":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=
 // ---------- Графика: векторные SVG (js/artdata.js, исходники в art/*.svg) ----------
 // При запуске каждый SVG один раз растрируется в канвас с запасом 2x — дальше только drawImage.
 const OL = '#1a110b';
-const SS = 2;
+const SS = 1.5; // запас резкости спрайтов (2 — чётче, но тяжелее для слабых ПК)
 const Art = { ready: false };
 const PAL = [
   { accent: '#5fc0cf', coatD: '#2f5a64', name: 'Игрок 1' },
@@ -1100,7 +1101,7 @@ function tile(ctx, s, x, y, w, h) {
 }
 
 // ---------- Земля: чанки 512x512, запекаются по требованию, старые выгружаются ----------
-const CHUNK = 512, MAX_CHUNKS = 28;
+const CHUNK = 512, MAX_CHUNKS = 56;
 function getChunk(cx, cy) {
   const key = cy * 64 + cx;
   let ch = Art.chunks.get(key);
@@ -1115,6 +1116,14 @@ function getChunk(cx, cy) {
   return ch.c;
 }
 const FLOOR_TILE = { wood: 'floor_wood', stone: 'floor_stone', tile: 'floor_tile', concrete: 'floor_concrete', asphalt: 'floor_asphalt', lab: 'floor_lab', hay: 'floor_hay' };
+// заранее печём участки земли вокруг камеры по одному за кадр — без рывков при беге по карте
+function prebakeChunks() {
+  if (!Art.chunks || !G.players.length || !Render.view) return;
+  const V = Render.view, pad = CHUNK;
+  for (let cy = Math.max(0, Math.floor((V.vy0 - pad) / CHUNK)); cy <= Math.min(Math.ceil(WORLD_H / CHUNK) - 1, Math.floor((V.vy1 + pad) / CHUNK)); cy++)
+    for (let cx = Math.max(0, Math.floor((V.vx0 - pad) / CHUNK)); cx <= Math.min(Math.ceil(WORLD_W / CHUNK) - 1, Math.floor((V.vx1 + pad) / CHUNK)); cx++)
+      if (!Art.chunks.has(cy * 64 + cx)) { getChunk(cx, cy); return; }
+}
 function bakeChunk(cx, cy) {
   const c = document.createElement('canvas'); c.width = CHUNK; c.height = CHUNK;
   const x = c.getContext('2d');
@@ -1200,6 +1209,10 @@ function bakeChunk(cx, cy) {
   }
   const fire = World.fire;
   if (fire && rectsOverlap(ox, oy, CHUNK, CHUNK, fire.x - 60, fire.y - 60, 120, 120)) { const s = S.fire_ring; x.drawImage(s.c, fire.x - ox - s.ax, fire.y - oy - s.ay, s.w, s.h); }
+  // тени деревьев и кустов запечены в землю (раньше рисовались каждый кадр)
+  x.fillStyle = 'rgba(0,0,0,0.32)';
+  for (const t of World.trees) { if (t.x < ox - 80 || t.x > ox + CHUNK + 80 || t.y < oy - 40 || t.y > oy + CHUNK + 40) continue; x.beginPath(); x.ellipse(t.x + 10 - ox, t.y + 2 - oy, 46 * t.s, 17 * t.s, 0, 0, TAU); x.fill(); }
+  for (const b of World.bushes) { if (b.x < ox - 40 || b.x > ox + CHUNK + 40 || b.y < oy - 20 || b.y > oy + CHUNK + 20) continue; x.beginPath(); x.ellipse(b.x + 3 - ox, b.y + 1 - oy, 26, 7, 0, 0, TAU); x.fill(); }
   return c;
 }
 
@@ -3582,7 +3595,7 @@ const G = {
   team: {}, players: [], enemies: [], items: [], pickups: [], projs: [], parts: [], texts: [], stains: [], msgs: [],
   tracers: [], flashes: [], eprojs: [], webs: [], fires: [], waves: [], bolts: [], allies: [], bombs: [], sparks: [], dmgNums: [], mines: [], turrets: [], vortexes: [], vehicles: [], rubble: [], camKick: null, slowT: 0, ambT: 3,
   spawnQ: [], kills: 0, cam: { x: 2368, y: 1900, zoom: 1 }, shake: 0, hitstop: 0, flowT: 0, flowDirty: true, overT: 0,
-  paused: false, showFps: true, quality: 1, bestNight: 0, zoneShown: {},
+  paused: false, showFps: true, qLevel: 2, autoQ: true, bestNight: 0, zoneShown: {},
 };
 
 function msg(text, col = '#f2e6c8') {
@@ -3821,7 +3834,7 @@ function update(dt) {
     let tg = G.players.filter(alive);
     if (!tg.length) tg = G.players.filter((p) => p.state !== 'dead');
     computeFlow(tg);
-    G.flowT = 0.4; G.flowDirty = false;
+    G.flowT = 0.6; G.flowDirty = false;
   }
   for (const p of G.players) updatePlayer(p, Input.ctrls[p.i], dt);
   // монстры далеко от игроков «спят» — экономия для слабых ПК
@@ -3911,9 +3924,11 @@ function initRender() {
   addEventListener('resize', resize);
 }
 
+// Внутреннее разрешение: картинка рисуется в меньший холст и растягивается на экран.
+// На слабых ПК (Windows 7, встроенная графика) это главный выигрыш — пикселей в 2–4 раза меньше.
+const Q_LEVELS = [1080, 900, 720, 600, 480];
 function resize() {
-  const q = G.quality;
-  const h = Math.min(innerHeight, 1080) * q, w = h * innerWidth / innerHeight;
+  const h = Math.min(innerHeight, Q_LEVELS[G.qLevel ?? 2]), w = h * innerWidth / innerHeight;
   Render.W = Render.cv.width = Math.round(w);
   Render.H = Render.cv.height = Math.round(h);
   Render.lc.width = Math.ceil(Render.W / 4); Render.lc.height = Math.ceil(Render.H / 4);
@@ -3958,8 +3973,6 @@ function render() {
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   for (const p of G.players) if (p.state !== 'dead') { ctx.beginPath(); ctx.ellipse(p.x, p.y, 15, 6, 0, 0, TAU); ctx.fill(); }
   for (const e of G.enemies) if (inView(e.x, e.y) && e.state !== 'cling' && !e.hidden) { const fl = EDEF[e.type].float ? 0.6 : 1; ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r * 1.15 * fl, e.r * 0.45 * fl, 0, 0, TAU); ctx.fill(); }
-  for (const t of World.trees) if (inView(t.x, t.y)) { ctx.beginPath(); ctx.ellipse(t.x + 10, t.y + 2, 46 * t.s, 17 * t.s, 0, 0, TAU); ctx.fill(); }
-  for (const b of World.bushes) if (inView(b.x, b.y)) { ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + 1, 26, 7, 0, 0, TAU); ctx.fill(); }
   for (const p of G.players) if (p.state !== 'dead') {
     ctx.strokeStyle = PAL[p.i].accent; ctx.globalAlpha = 0.55; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.ellipse(p.x, p.y, 19, 8, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
@@ -4606,7 +4619,7 @@ function buildMinimap() {
   x.fillStyle = '#e8dcc0'; for (const wl of World.walls) x.fillRect(wl.x * k, wl.y * k, Math.max(1, wl.w * k), Math.max(1, wl.h * k));
   for (const p of World.props) if (!p.dead && p.solid && (p.car || p.tall || p.w > 60)) { x.fillStyle = '#9a9488'; x.fillRect(p.x * k, p.y * k, Math.max(1, p.w * k), Math.max(1, p.h * k)); }
   MM.dirty = false;
-  if (!MM.seen) { MM.seen = new Uint8Array(Math.ceil(WORLD_W / MM.cs) * Math.ceil(WORLD_H / MM.cs)); MM.fog = document.createElement('canvas'); MM.fog.width = w; MM.fog.height = h; MM.fogDirty = true; }
+  if (!MM.seen) { MM.fogInit = false; MM.fresh = []; MM.seen = new Uint8Array(Math.ceil(WORLD_W / MM.cs) * Math.ceil(WORLD_H / MM.cs)); MM.fog = document.createElement('canvas'); MM.fog.width = w; MM.fog.height = h; MM.fogDirty = true; }
 }
 function revealMinimap() {
   if (!MM.seen) return;
@@ -4616,14 +4629,15 @@ function revealMinimap() {
     for (let gy = Math.max(0, Math.floor((p.y - R) / cs)); gy <= Math.floor((p.y + R) / cs); gy++) for (let gx = Math.max(0, Math.floor((p.x - R) / cs)); gx <= Math.min(nx - 1, Math.floor((p.x + R) / cs)); gx++) {
       const i = gy * nx + gx;
       if (i >= MM.seen.length || MM.seen[i]) continue;
-      if (dist2(gx * cs + cs / 2, gy * cs + cs / 2, p.x, p.y) < R * R) { MM.seen[i] = 1; MM.fogDirty = true; }
+      if (dist2(gx * cs + cs / 2, gy * cs + cs / 2, p.x, p.y) < R * R) { MM.seen[i] = 1; MM.fogDirty = true; (MM.fresh || (MM.fresh = [])).push(i); }
     }
   }
   if (MM.fogDirty) {
-    const x = MM.fog.getContext('2d'), k = MM.k; x.clearRect(0, 0, MM.fog.width, MM.fog.height);
-    x.fillStyle = 'rgba(10,9,8,0.9)';
-    for (let i = 0; i < MM.seen.length; i++) if (!MM.seen[i]) x.fillRect((i % nx) * cs * k, Math.floor(i / nx) * cs * k, cs * k + 0.6, cs * k + 0.6);
-    MM.fogDirty = false;
+    // туман рисуется один раз, дальше только «протираются» новые клетки (раньше перерисовывались все ~7000)
+    const x = MM.fog.getContext('2d'), k = MM.k;
+    if (!MM.fogInit) { x.fillStyle = 'rgba(10,9,8,0.9)'; x.fillRect(0, 0, MM.fog.width, MM.fog.height); MM.fogInit = true; MM.fresh = []; for (let i = 0; i < MM.seen.length; i++) if (MM.seen[i]) MM.fresh.push(i); }
+    for (const i of MM.fresh || []) x.clearRect((i % nx) * cs * k - 0.3, Math.floor(i / nx) * cs * k - 0.3, cs * k + 0.6, cs * k + 0.6);
+    MM.fresh = []; MM.fogDirty = false;
   }
 }
 function drawMinimap(ctx, rx, by) {
@@ -4959,6 +4973,17 @@ function drawPause() {
   drawScreen('Пауза', lines, `День ${G.day} · ${G.phase === 'night' ? 'ночь' : 'день'}`);
 }
 
+// автонастройка: проседает FPS — снижаем внутреннее разрешение, стабильно 60 — поднимаем обратно
+function autoQuality(dt) {
+  if (!G.autoQ || G.state !== 'play' || G.paused) return;
+  const A = autoQuality; A.t = (A.t || 0) + dt;
+  if (A.t < 1) return;
+  A.t = 0;
+  const fps = Render.fps;
+  if (fps < 47) { A.low = (A.low || 0) + 1; A.high = 0; } else if (fps > 58) { A.high = (A.high || 0) + 1; A.low = 0; } else { A.low = 0; A.high = 0; }
+  if (A.low >= 2 && G.qLevel < Q_LEVELS.length - 1) { G.qLevel++; resize(); A.low = 0; }
+  else if (A.high >= 8 && G.qLevel > 1) { G.qLevel--; resize(); A.high = 0; A.cool = 1; }
+}
 function frame(t) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
@@ -4967,7 +4992,13 @@ function frame(t) {
   if (fpsAcc >= 0.5) { Render.fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0; }
 
   if (G.state !== 'play' || G.paused) Input.update();
-  if (Input.keys.has('F2') && !frame.f2) { G.quality = G.quality === 1 ? 0.75 : G.quality === 0.75 ? 0.5 : 1; resize(); msg(`Качество: ${G.quality * 100}%`); }
+  // F2: Авто → 1080 → 900 → 720 → 600 → 480 → Авто
+  if (Input.keys.has('F2') && !frame.f2) {
+    if (G.autoQ) { G.autoQ = false; G.qLevel = 0; } else if (G.qLevel >= Q_LEVELS.length - 1) { G.autoQ = true; G.qLevel = 2; } else G.qLevel++;
+    resize(); msg(G.autoQ ? 'Качество: авто' : `Качество: ${Q_LEVELS[G.qLevel]}p`);
+  }
+  autoQuality(dt);
+  prebakeChunks();
   frame.f2 = Input.keys.has('F2');
   if (Input.keys.has('F3') && !frame.f3) G.showFps = !G.showFps;
   frame.f3 = Input.keys.has('F3');

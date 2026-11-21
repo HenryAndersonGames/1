@@ -14,5 +14,7 @@ A=dist/ShatteredDawn/resources/app
 mkdir -p $A/js
 cp desktop/main.js desktop/package.json index.html $A/
 cp js/*.js $A/js/
+# безопасный режим — без принудительного включения видеокарты (если есть артефакты)
+printf '@echo off\r\nstart "" "%%~dp0ShatteredDawn.exe" --safe\r\n' > dist/ShatteredDawn/SafeMode.bat
 (cd dist && rm -f ShatteredDawn-Windows.zip && zip -qr -9 ShatteredDawn-Windows.zip ShatteredDawn)
 echo "Готово: dist/ShatteredDawn-Windows.zip"

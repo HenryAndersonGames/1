@@ -2,6 +2,13 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
+// Windows 7 и старые видеокарты часто попадают в «чёрный список» GPU — тогда всё рисует процессор.
+// Включаем видеокарту принудительно (если игра запустится с артефактами — запустите SafeMode.bat).
+if (!process.argv.includes('--safe')) {
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
+}
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.whenReady().then(() => {
   const w = new BrowserWindow({

@@ -9,7 +9,7 @@ const G = {
   team: {}, players: [], enemies: [], items: [], pickups: [], projs: [], parts: [], texts: [], stains: [], msgs: [],
   tracers: [], flashes: [], eprojs: [], webs: [], fires: [], waves: [], bolts: [], allies: [], bombs: [], sparks: [], dmgNums: [], mines: [], turrets: [], vortexes: [], vehicles: [], rubble: [], camKick: null, slowT: 0, ambT: 3,
   spawnQ: [], kills: 0, cam: { x: 2368, y: 1900, zoom: 1 }, shake: 0, hitstop: 0, flowT: 0, flowDirty: true, overT: 0,
-  paused: false, showFps: true, quality: 1, bestNight: 0, zoneShown: {},
+  paused: false, showFps: true, qLevel: 2, autoQ: true, bestNight: 0, zoneShown: {},
 };
 
 function msg(text, col = '#f2e6c8') {
@@ -248,7 +248,7 @@ function update(dt) {
     let tg = G.players.filter(alive);
     if (!tg.length) tg = G.players.filter((p) => p.state !== 'dead');
     computeFlow(tg);
-    G.flowT = 0.4; G.flowDirty = false;
+    G.flowT = 0.6; G.flowDirty = false;
   }
   for (const p of G.players) updatePlayer(p, Input.ctrls[p.i], dt);
   // монстры далеко от игроков «спят» — экономия для слабых ПК
