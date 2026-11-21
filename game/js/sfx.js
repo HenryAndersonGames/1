@@ -55,6 +55,7 @@ const Sfx = (() => {
       case 'throw': hiss(0.13, 0.12, 1700); break;
       case 'build': tone(210, 0.05, 'square', 0.15); tone(210, 0.05, 'square', 0.15, 0, 0.09); break;
       case 'roll': if (rate(n, 60)) hiss(0.16, 0.09, 600); break;
+      case 'growl': if (rate(n, 200)) tone(80, 0.4, 'sawtooth', 0.12, 30); break;
       case 'slam': tone(55, 0.45, 'square', 0.3, -25); hiss(0.35, 0.3, 260); break;
       case 'door': tone(180, 0.12, 'triangle', 0.15, 60); break;
       case 'glass': hiss(0.2, 0.2, 4200, 2); tone(1800, 0.08, 'triangle', 0.05); break;
@@ -62,6 +63,24 @@ const Sfx = (() => {
       case 'revive': [392, 523, 659].forEach((f, i) => tone(f, 0.18, 'triangle', 0.12, 0, i * 0.1)); break;
       case 'cling': if (rate(n, 100)) tone(500, 0.15, 'sawtooth', 0.12, 300); break;
       case 'menu': tone(520, 0.05, 'square', 0.07); break;
+      case 'heavy': hiss(0.25, 0.14, 900, 0.6); tone(110, 0.25, 'sawtooth', 0.06, 60); break;
+      case 'hitH': if (rate(n, 40)) { tone(90, 0.16, 'square', 0.24, -50); hiss(0.12, 0.3, 500); } break;
+      case 'shot': hiss(0.12, 0.45, 1800, 0.5); tone(160, 0.08, 'square', 0.2, -100); break;
+      case 'shotgun': hiss(0.25, 0.55, 900, 0.4); tone(80, 0.18, 'square', 0.3, -40); break;
+      case 'click': tone(1200, 0.03, 'square', 0.06); break;
+      case 'explode': hiss(0.8, 0.6, 180, 0.4); tone(45, 0.7, 'sawtooth', 0.35, -20); break;
+      case 'hiss': hiss(0.4, 0.15, 3000, 1); break;
+      case 'fire': hiss(0.6, 0.2, 700, 0.5); break;
+      case 'web': hiss(0.2, 0.12, 2400, 2); break;
+      case 'orb': tone(660, 0.3, 'sine', 0.12, -300); break;
+      case 'charge': tone(220, 0.6, 'sine', 0.08, 400); break;
+      case 'blink': tone(900, 0.15, 'sine', 0.1, 700); break;
+      case 'howl': tone(260, 1.3, 'sine', 0.1, 200, 0); tone(400, 1, 'sine', 0.06, 120, 0.3); break;
+      case 'die': if (rate(n, 60)) tone(120, 0.25, 'sawtooth', 0.12, -70); break;
+      case 'craft': [330, 440, 550].forEach((f, i) => tone(f, 0.08, 'square', 0.08, 0, i * 0.06)); break;
+      case 'zap': hiss(0.25, 0.35, 3200, 0.8); tone(880, 0.2, 'sawtooth', 0.1, -500); break;
+      case 'frost': hiss(0.5, 0.25, 5000, 1.5); tone(1400, 0.4, 'sine', 0.06, -600); break;
+      case 'search': hiss(0.3, 0.08, 1500, 1); break;
     }
   }
   return { unlock, play };

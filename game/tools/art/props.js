@@ -425,6 +425,18 @@ function iconEng() {
   s += g('rotate(-40 6 -4)', shape(smooth([[-2, -5, 1], [16, -2, 1], [18, -6], [21, -5], [20, 0], [21, 5], [18, 6], [16, 2, 1], [-2, 2, 1]]), '#7a7e80', { sw: 1.4, sh: [1.6, 1.4] }));
   return svg(-18, -18, 36, 36, s);
 }
+function iconMar() {
+  let s = g('rotate(-35)', shape(smooth([[-2, -1.6, 1], [26, -2.6], [28, 0], [26, 2.6], [-2, 1.6, 1]]), '#a87c4c', { sw: 1.4, sh: [1, 1.2] }) + shape(rect(-4, -2.4, 9, 4.8), '#3a3030', { sw: 1, flat: true, nodrop: true }));
+  s = g('translate(-10 10)', s);
+  s += g('translate(12 10) rotate(-145)', shape(smooth([[0, -1.6, 1], [16, -2.4], [21, -0.4, 1], [16, 1.8], [0, 1.6, 1]]), '#b4b9bc', { sw: 1.2, sh: [0.8, 1], nohatch: true }) + shape(rect(-7, -2, 7, 4), '#4a3020', { sw: 1, flat: true, nodrop: true }));
+  s += line('M-14 -14L-8 -10M14 -14L8 -10M0 -16L0 -10', 1.6, '#e8a03c');
+  return svg(-18, -18, 36, 36, s);
+}
+function iconMed() {
+  let s = shape(smooth([[-12, -10, 1], [12, -10, 1], [13, 0], [12, 10, 1], [-12, 10, 1], [-13, 0]]), '#e6ddd0', { sw: 1.5, sh: [2, 2], nohatch: true });
+  s += shape(poly([[-2.6, -7], [2.6, -7], [2.6, -2.6], [7, -2.6], [7, 2.6], [2.6, 2.6], [2.6, 7], [-2.6, 7], [-2.6, 2.6], [-7, 2.6], [-7, -2.6], [-2.6, -2.6]]), '#c0362a', { sw: 0.8, nodrop: true, flat: true });
+  return svg(-18, -18, 36, 36, s);
+}
 function iconSun() {
   let s = '';
   for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; s += g(`rotate(${k * 45})`, shape(poly([[-2.4, -9], [0, -15], [2.4, -9]]), '#e8b84a', { sw: 1, flat: true, nodrop: true })); }
@@ -455,6 +467,6 @@ function build(out) {
   out.trap = trap(); out.fire_ring = fireRing(); out.fire_logs = fireLogs();
   for (let k = 0; k < 4; k++) out[`flame${k}`] = flame(k);
   out.brick = brick(); out.bottle = bottle(); out.wood = woodPickup(); out.scrap = scrapPickup(); out.med = medPickup();
-  out.icon_str = iconFist(); out.icon_agi = iconAgi(); out.icon_eng = iconEng(); out.icon_sun = iconSun(); out.icon_moon = iconMoon();
+  out.icon_str = iconFist(); out.icon_agi = iconAgi(); out.icon_eng = iconEng(); out.icon_sun = iconSun(); out.icon_mar = iconMar(); out.icon_med = iconMed(); out.band = medPickup(); out.icon_moon = iconMoon();
 }
 module.exports = { build };

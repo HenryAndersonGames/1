@@ -40,78 +40,71 @@ function render() {
   ctx.fillStyle = '#0d0c0a'; ctx.fillRect(0, 0, Render.W, Render.H);
   if (!G.players.length) return;
   const v = worldTransform(ctx);
-  const vx0 = G.cam.x - v.w / 2 - 120, vx1 = G.cam.x + v.w / 2 + 120, vy0 = G.cam.y - v.h / 2 - 80, vy1 = G.cam.y + v.h / 2 + 260;
+  const vx0 = G.cam.x - v.w / 2 - 140, vx1 = G.cam.x + v.w / 2 + 140, vy0 = G.cam.y - v.h / 2 - 100, vy1 = G.cam.y + v.h / 2 + 340;
   const inView = (x, y) => x > vx0 && x < vx1 && y > vy0 && y < vy1;
+  Render.view = { vx0, vx1, vy0, vy1 };
 
   // 1. земля
-  for (const ch of Art.chunks) {
-    const x = ch.cx * CHUNK, y = ch.cy * CHUNK;
-    if (x + CHUNK < vx0 || x > vx1 || y + CHUNK < vy0 - 200 || y > vy1) continue;
-    ctx.drawImage(ch.c, x, y, CHUNK + 0.5, CHUNK + 0.5);
-  }
-  // 2. пятна, ловушки, тени
-  for (const s of G.stains) {
-    if (!inView(s.x, s.y)) continue;
-    ctx.fillStyle = s.col; ctx.beginPath(); ctx.ellipse(s.x, s.y, s.r, s.r * 0.6, s.a, 0, TAU); ctx.fill();
-  }
+  for (let cy = Math.max(0, Math.floor((vy0 - 200) / CHUNK)); cy <= Math.min(Math.ceil(WORLD_H / CHUNK) - 1, Math.floor(vy1 / CHUNK)); cy++)
+    for (let cx = Math.max(0, Math.floor(vx0 / CHUNK)); cx <= Math.min(Math.ceil(WORLD_W / CHUNK) - 1, Math.floor(vx1 / CHUNK)); cx++)
+      ctx.drawImage(getChunk(cx, cy), cx * CHUNK, cy * CHUNK, CHUNK + 0.5, CHUNK + 0.5);
+  // 2. пятна, паутина, ловушки, тени
+  for (const s of G.stains) { if (!inView(s.x, s.y)) continue; ctx.fillStyle = s.col; ctx.beginPath(); ctx.ellipse(s.x, s.y, s.r, s.r * 0.6, s.a, 0, TAU); ctx.fill(); }
+  for (const w of G.webs) drawWeb(ctx, w);
   for (const s of World.structs) if (s.kind === 'trap' && inView(s.x, s.y)) drawTrap(ctx, s);
   ctx.fillStyle = 'rgba(0,0,0,0.32)';
   for (const p of G.players) if (p.state !== 'dead') { ctx.beginPath(); ctx.ellipse(p.x, p.y, 15, 6, 0, 0, TAU); ctx.fill(); }
-  for (const e of G.enemies) if (inView(e.x, e.y) && e.state !== 'cling') {
-    ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r * 1.15, e.r * 0.45, 0, 0, TAU); ctx.fill();
-  }
+  for (const e of G.enemies) if (inView(e.x, e.y) && e.state !== 'cling' && !e.hidden) { const fl = EDEF[e.type].float ? 0.6 : 1; ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r * 1.15 * fl, e.r * 0.45 * fl, 0, 0, TAU); ctx.fill(); }
   for (const t of World.trees) if (inView(t.x, t.y)) { ctx.beginPath(); ctx.ellipse(t.x + 10, t.y + 2, 46 * t.s, 17 * t.s, 0, 0, TAU); ctx.fill(); }
   for (const b of World.bushes) if (inView(b.x, b.y)) { ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + 1, 26, 7, 0, 0, TAU); ctx.fill(); }
-  // маркеры игроков на земле
   for (const p of G.players) if (p.state !== 'dead') {
     ctx.strokeStyle = PAL[p.i].accent; ctx.globalAlpha = 0.55; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.ellipse(p.x, p.y, 19, 8, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
   }
+  for (const f of G.fires) drawFireArea(ctx, f);
 
   // 3. сортировка по глубине
   const dl = [];
   for (const t of World.trees) if (inView(t.x, t.y)) dl.push({ k: t.y, t: 0, o: t });
   for (const b of World.bushes) if (inView(b.x, b.y)) dl.push({ k: b.y, t: 1, o: b });
   for (const w of World.walls) if (rectsOverlap(w.x, w.y - WALL_H, w.w, w.h + WALL_H, vx0, vy0, vx1 - vx0, vy1 - vy0)) dl.push({ k: w.y + w.h, t: 2, o: w });
-  for (const c of World.cars) if (inView(c.x + c.w / 2, c.y)) dl.push({ k: c.y + c.h, t: 3, o: c });
+  for (const p of World.props) if (!p.dead && inView(p.x + p.w / 2, p.y + p.h)) dl.push({ k: p.y + p.h, t: 3, o: p });
   for (const s of World.structs) if (s.kind !== 'trap' && !s.carried && inView(s.x + s.w / 2, s.y)) dl.push({ k: s.y + s.h, t: 4, o: s });
   for (const p of G.players) dl.push({ k: p.y, t: 5, o: p });
-  for (const e of G.enemies) if (inView(e.x, e.y)) dl.push({ k: e.state === 'cling' && e.host ? e.host.y + 2 : e.y, t: 6, o: e });
+  for (const e of G.enemies) if (inView(e.x, e.y) && !e.hidden) dl.push({ k: e.state === 'cling' && e.host ? e.host.y + 2 : e.y, t: 6, o: e });
   for (const it of G.items) if (!it.held && !it.fly && inView(it.x, it.y)) dl.push({ k: it.y - 4, t: 7, o: it });
   for (const k of G.pickups) if (inView(k.x, k.y)) dl.push({ k: k.y, t: 8, o: k });
   for (const pr of G.projs) dl.push({ k: pr.y, t: 9, o: pr });
-  dl.push({ k: World.fire.y, t: 10, o: World.fire });
+  for (const a of G.allies) dl.push({ k: a.y, t: 11, o: a });
+  if (inView(World.fire.x, World.fire.y)) dl.push({ k: World.fire.y, t: 10, o: World.fire });
   dl.sort((a, b) => a.k - b.k);
   for (const d of dl) {
     switch (d.t) {
       case 0: drawTree(ctx, d.o); break;
       case 1: spr(ctx, Art.bushes[d.o.v], d.o.x, d.o.y, false); break;
       case 2: drawWall(ctx, d.o); break;
-      case 3: drawCar(ctx, d.o); break;
+      case 3: drawProp(ctx, d.o); break;
       case 4: drawStruct(ctx, d.o); break;
       case 5: drawPlayer(ctx, d.o); break;
       case 6: drawEnemy(ctx, d.o); break;
-      case 7: drawItem(ctx, d.o.kind, d.o.x, d.o.y, 0); break;
+      case 7: drawGroundItem(ctx, d.o); break;
       case 8: drawPickup(ctx, d.o); break;
       case 9: drawProj(ctx, d.o); break;
       case 10: drawFire(ctx, d.o); break;
+      case 11: drawAlly(ctx, d.o); break;
     }
   }
-  // частицы
   for (const q of G.parts) {
     ctx.globalAlpha = Math.min(1, q.life / q.max * 2);
     ctx.fillStyle = q.col; ctx.fillRect(q.x - q.size / 2, q.y - q.z - q.size / 2, q.size, q.size);
   }
   ctx.globalAlpha = 1;
-
   // 4. освещение
   const dk = darkness();
   if (dk > 0.01) drawLight(ctx, dk);
-
-  // 5. поверх темноты: телеграфы атак, глаза, маркеры
+  // 5. поверх темноты
   worldTransform(ctx);
   drawOverlay(ctx, dk);
-
   // 6. интерфейс
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (G.state === 'play') drawHUD(ctx);
@@ -119,48 +112,50 @@ function render() {
 
 // ---------- Объекты ----------
 function occludes(x0, x1, yTop, yBase) {
-  for (const p of G.players) {
-    if (p.state === 'dead') continue;
-    if (p.y < yBase && p.y > yTop && p.x > x0 && p.x < x1) return true;
-  }
+  for (const p of G.players) { if (p.state === 'dead') continue; if (p.y < yBase && p.y > yTop && p.x > x0 && p.x < x1) return true; }
   return false;
 }
-
-// спрайт по якорю в точке (x,y) — футпринт-якорь берётся из viewBox
 function put(ctx, s, x, y) { ctx.drawImage(s.c, x - s.ax, y - s.ay, s.w, s.h); }
 
 function drawTree(ctx, t) {
   const s = Art.trees[t.v], sh = t.shake > 0 ? Math.sin(t.shake * 60) * 3 : 0;
-  const occ = occludes(t.x - 56 * t.s, t.x + 56 * t.s, t.y - s.ay * t.s + 10, t.y - 4);
-  if (occ) ctx.globalAlpha = 0.38;
+  if (occludes(t.x - 56 * t.s, t.x + 56 * t.s, t.y - s.ay * t.s + 10, t.y - 4)) ctx.globalAlpha = 0.38;
   ctx.drawImage(s.c, t.x - s.ax * t.s + sh, t.y - s.ay * t.s, s.w * t.s, s.h * t.s);
   ctx.globalAlpha = 1;
 }
-
+const WALLSTYLE = { wood: 'wall', ruin: 'ruin', brick: 'brick', metal: 'metal', concrete: 'concrete', barn: 'barn', fencewood: 'fencewood', fencechain: 'fencechain', fencebarb: 'fencebarb' };
 function drawWall(ctx, w) {
-  const S = Art.s;
-  if (w.bench) { put(ctx, S.bench, w.x, w.y); return; }
-  const horiz = w.w > w.h;
-  const occ = occludes(w.x - 14, w.x + w.w + 14, w.y - WALL_H - 60, w.y + (horiz ? w.h : 6));
-  if (occ) ctx.globalAlpha = 0.45;
-  const front = w.ruin ? S.ruin_front : S.wall_front;
-  const top = horiz ? (w.ruin ? S.ruin_top : S.wall_top) : (w.ruin ? S.ruin_topv : S.wall_topv);
-  tile(ctx, front, w.x, w.y + w.h - WALL_H, w.w, WALL_H);
-  tile(ctx, top, w.x, w.y - WALL_H, w.w, w.h);
-  ctx.strokeStyle = OL; ctx.lineWidth = 2.4; ctx.lineJoin = 'round';
-  ctx.strokeRect(w.x, w.y - WALL_H, w.w, w.h + WALL_H);
-  ctx.beginPath(); ctx.moveTo(w.x, w.y + w.h - WALL_H); ctx.lineTo(w.x + w.w, w.y + w.h - WALL_H); ctx.stroke();
+  const S = Art.s, st = WALLSTYLE[w.style] || 'wall', horiz = w.w > w.h;
+  const front = S[st + '_front'], top = S[st + (horiz ? '_top' : '_topv')];
+  const H = st.startsWith('fence') ? 30 : WALL_H;
+  if (occludes(w.x - 14, w.x + w.w + 14, w.y - H - 60, w.y + (horiz ? w.h : 6))) ctx.globalAlpha = st.startsWith('fence') ? 0.7 : 0.45;
+  if (st === 'fencebarb') ctx.drawImage(front.c, 0, 0, front.c.width, front.c.height, w.x, w.y + w.h - H - 6, Math.min(w.w, 64), front.h);
+  tile(ctx, front, w.x, w.y + w.h - H - (st === 'fencebarb' ? 6 : 0), w.w, front.h);
+  tile(ctx, top, w.x, w.y - H, w.w, w.h);
+  ctx.strokeStyle = OL; ctx.lineWidth = st.startsWith('fence') ? 1.6 : 2.4; ctx.lineJoin = 'round';
+  if (!st.startsWith('fence')) { ctx.strokeRect(w.x, w.y - H, w.w, w.h + H); ctx.beginPath(); ctx.moveTo(w.x, w.y + w.h - H); ctx.lineTo(w.x + w.w, w.y + w.h - H); ctx.stroke(); }
   ctx.globalAlpha = 1;
 }
-
-function drawCar(ctx, c) {
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(c.x + c.w / 2, c.y + c.h, c.w / 2 + 8, 10, 0, 0, TAU); ctx.fill();
-  put(ctx, Art.s['car' + (c.v || 0)], c.x, c.y + 26);
+function drawProp(ctx, p) {
+  let s = Art.s[p.spr];
+  if (p.spr === 'lamp' && p.on) s = Art.s.lamp_on;
+  if (p.spr === 'flood' && World.gen.on) s = Art.s.flood_on;
+  if (p.spr === 'generator' && World.gen.on) s = Art.s.generator_on;
+  if (p.flash > 0) { p.flash -= 1 / 60; s = flashOf(s); }
+  if (p.car) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(p.x + p.w / 2, p.y + p.h, p.w / 2 + 8, 10, 0, 0, TAU); ctx.fill(); put(ctx, s, p.x, p.y + 26); return; }
+  if (p.hide) { // кукуруза: становится прозрачной, если внутри кто-то есть
+    let a = 1;
+    for (const q of G.players) if (q.state !== 'dead' && Math.abs(q.x - p.ox) < 26 && q.y < p.oy + 4 && q.y > p.oy - 70) a = 0.45;
+    ctx.globalAlpha = a; put(ctx, s, p.ox, p.oy); ctx.globalAlpha = 1; return;
+  }
+  if (p.tall && occludes(p.x - 10, p.x + p.w + 10, p.y - p.tall - 40, p.y + p.h)) ctx.globalAlpha = 0.5;
+  if (p.searched) ctx.filter = 'brightness(0.7)';
+  put(ctx, s, p.cx ? p.ox : p.x, p.cx ? p.oy : p.y);
+  ctx.filter = 'none'; ctx.globalAlpha = 1;
+  if (p.fuse) { ctx.fillStyle = Math.floor(G.t * 20) % 2 ? '#ffd040' : '#ff4020'; ctx.beginPath(); ctx.arc(p.x + p.w / 2, p.y - 30, 4, 0, TAU); ctx.fill(); }
 }
-
 function structSprite(s) {
-  const S = Art.s, k = s.hp / s.maxHp;
-  const dmg = k > 0.66 ? 0 : k > 0.33 ? 1 : 2;
+  const S = Art.s, k = s.hp / s.maxHp, dmg = k > 0.66 ? 0 : k > 0.33 ? 1 : 2;
   switch (s.kind) {
     case 'door':
       if (s.broken) return s.horiz ? S.door_h_broken : S.door_v_broken;
@@ -175,22 +170,23 @@ function structSprite(s) {
   }
   return null;
 }
-
 function drawStruct(ctx, s) {
   if (s.ghost) ctx.globalAlpha = 0.6;
   const k = s.hp / s.maxHp;
   if ((s.kind === 'door' || s.kind === 'window') && !s.broken && !s.open && s.horiz && occludes(s.x - 10, s.x + s.w + 10, s.y - WALL_H - 60, s.y + s.h)) ctx.globalAlpha = 0.5;
   if (s.kind === 'barricade' && s.vert) {
     const n = Math.max(1, Math.ceil(k * 4)), st = Art.s.stake;
-    for (let i = 0; i < 4; i++) {
-      if (i >= n && i !== 0) continue;
-      const sp = s.flash > 0 ? flashOf(st) : st;
-      put(ctx, sp, s.x + 8, s.y + 10 + i * 15);
-    }
+    for (let i = 0; i < 4; i++) { if (i >= n && i !== 0) continue; put(ctx, s.flash > 0 ? flashOf(st) : st, s.x + 8, s.y + 10 + i * 15); }
   } else {
     const sp = structSprite(s);
     if (sp) put(ctx, s.flash > 0 ? flashOf(sp) : sp, s.x, s.y);
   }
+  if (s.reinforced) { // прибитые доски
+    ctx.strokeStyle = OL; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(s.x - 2, s.y - 6); ctx.lineTo(s.x + s.w + 2, s.y + s.h - 14); ctx.stroke();
+    ctx.strokeStyle = '#8a6a44'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.fillStyle = '#c8c4b8'; ctx.fillRect(s.x + 2, s.y - 6, 2, 2); ctx.fillRect(s.x + s.w - 4, s.y + s.h - 16, 2, 2);
+  }
+  if (s.locked && !s.broken) { ctx.fillStyle = '#c9a040'; ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.fillRect(s.x + s.w / 2 - 4, s.y - 20, 8, 7); ctx.strokeRect(s.x + s.w / 2 - 4, s.y - 20, 8, 7); ctx.beginPath(); ctx.arc(s.x + s.w / 2, s.y - 20, 3, Math.PI, 0); ctx.stroke(); }
   ctx.globalAlpha = 1;
   if (k < 1 && s.kind !== 'loot' && !s.broken && s.kind !== 'trap') {
     const by = s.y - (s.kind === 'door' || s.kind === 'window' ? WALL_H + 10 : 44);
@@ -198,25 +194,43 @@ function drawStruct(ctx, s) {
     ctx.fillStyle = k > 0.5 ? '#c9b46a' : k > 0.25 ? '#d6873a' : '#d6493a'; ctx.fillRect(s.x + s.w / 2 - 18, by, 36 * k, 5);
   }
 }
-
 function drawTrap(ctx, s) { put(ctx, s.flash > 0 ? flashOf(Art.s.trap) : Art.s.trap, s.x, s.y); }
-
 function drawFire(ctx, f) {
   put(ctx, Art.s.fire_logs, f.x, f.y);
-  const fr = Art.s['flame' + (Math.floor(G.t * 9) % 4)];
-  const sc = 1 + Math.sin(G.t * 13) * 0.04;
+  const fr = Art.s['flame' + (Math.floor(G.t * 9) % 4)], sc = 1 + Math.sin(G.t * 13) * 0.04;
   ctx.drawImage(fr.c, f.x - fr.ax * sc, f.y - 2 - fr.ay * sc, fr.w * sc, fr.h * sc);
   if (Math.random() < 0.2) part(f.x + rand(-12, 12), f.y - 20, 20, rand(-12, 12), rand(-5, 5), rand(90, 170), 1.3, Math.random() < 0.5 ? '#ffb040' : '#ff7a2a', 2, -40);
 }
-
+function drawFireArea(ctx, f) {
+  const k = Math.min(1, f.t / 1.5);
+  for (let i = 0; i < 4; i++) {
+    const a = i * 1.7 + f.x, fr = Art.s['flame' + ((Math.floor(G.t * 9) + i) % 4)], sc = 0.5 * k;
+    const x = f.x + Math.cos(a) * f.r * 0.45, y = f.y + Math.sin(a) * f.r * 0.25;
+    ctx.drawImage(fr.c, x - fr.ax * sc, y - fr.ay * sc, fr.w * sc, fr.h * sc);
+  }
+}
+function drawWeb(ctx, w) {
+  ctx.globalAlpha = Math.min(1, w.t / 1.5) * 0.75;
+  ctx.strokeStyle = '#e8e4d8'; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; ctx.moveTo(w.x, w.y); ctx.lineTo(w.x + Math.cos(a) * w.r, w.y + Math.sin(a) * w.r * 0.55); }
+  for (const r of [0.35, 0.65, 0.95]) { ctx.moveTo(w.x + w.r * r, w.y); ctx.ellipse(w.x, w.y, w.r * r, w.r * r * 0.55, 0, 0, TAU); }
+  ctx.stroke(); ctx.globalAlpha = 1;
+}
+function drawGroundItem(ctx, it) {
+  if (it.cat === 'w') {
+    const s = Art.s['w_' + it.type];
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(it.x, it.y, 18, 4, 0, 0, TAU); ctx.fill();
+    ctx.save(); ctx.translate(it.x - 14, it.y - 4); ctx.rotate(-0.25); ctx.drawImage(s.c, -s.ax, -s.ay, s.w, s.h); ctx.restore();
+    if (Math.floor(G.t * 2 + it.x) % 4 === 0) { ctx.fillStyle = 'rgba(255,240,200,0.5)'; ctx.fillRect(it.x + 6, it.y - 12, 2, 2); }
+  } else put(ctx, Art.s[it.kind], it.x, it.y);
+}
 function drawItem(ctx, kind, x, y, z) { put(ctx, Art.s[kind], x, y - z); }
-
 function drawPickup(ctx, k) {
   const b = Math.sin(k.t * 4) * 2 + 4, y = k.y - k.z - b;
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(k.x, k.y, 9, 3, 0, 0, TAU); ctx.fill();
   put(ctx, Art.s[k.kind], k.x, y);
 }
-
 function drawProj(ctx, pr) {
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(pr.x, pr.y, 9, 3, 0, 0, TAU); ctx.fill();
   const s = pr.kind === 'furn' ? Art.s[pr.ref.sub] : Art.s[pr.kind];
@@ -225,28 +239,58 @@ function drawProj(ctx, pr) {
   ctx.drawImage(s.c, -s.w / 2 * sc, -s.h / 2 * sc, s.w * sc, s.h * sc); ctx.restore();
 }
 
-function drawWeapon(ctx, p, bob) {
+// ----- Игрок: позы и оружие -----
+function playerPose(p) {
+  if (p.state === 'roll') return 'roll';
+  if (p.state === 'dash') return 'atkL1';
+  if (p.reviveTgt || p.search) return 'kneel';
+  if (p.throwT > 0) return p.throwT > 0.15 ? 'throw0' : 'throw1';
+  if (p.state === 'atk') {
+    const a = p.atk, pose = a.M.pose, early = p.t < a.wind;
+    if (pose === 'H' || pose === 'slam' || pose === 'leap') return early ? 'atkH0' : 'atkH1';
+    return early ? 'atkL0' : 'atkL1';
+  }
+  if (p.state === 'light') return p.t < 0.06 ? 'atkL1' : 'idle0';
+  if (p.hurtT > 0.15) return 'hurt';
+  return null;
+}
+function weaponAngle(p) {
   const fl = Math.cos(p.face) < 0 ? -1 : 1;
-  let a;
-  if (p.state === 'attack') {
-    const k = clamp(p.t / p.hitAt, 0, 1), dir = p.combo === 1 ? -1 : 1;
-    const sweep = p.combo === 2 ? 2.6 : 2.0;
-    a = p.face - dir * sweep / 2 + dir * sweep * (p.t < p.hitAt ? k * 0.15 : Math.min(1, 0.15 + (p.t - p.hitAt) / 0.06));
-    if (p.t >= p.hitAt && p.t < p.hitAt + 0.1) {
-      ctx.strokeStyle = 'rgba(255,240,210,0.55)'; ctx.lineWidth = 7; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.ellipse(p.x, p.y - 34, 56, 36, 0, p.face - sweep / 2, p.face + sweep / 2); ctx.stroke();
-    }
-  } else a = p.face + fl * 0.95;
+  const W = wep(p);
+  if (p.state === 'light' || (W.gun && p.state === 'normal')) return { a: p.face, fl };
+  if (p.state === 'atk') {
+    const a = p.atk, M = a.M;
+    const [s0, s1] = M.sw;
+    let rel;
+    if (p.t < a.wind) rel = s0 - 0.25 * (p.t / a.wind);
+    else rel = lerp(s0, s1, clamp((p.t - a.wind) / Math.max(0.05, a.act), 0, 1));
+    return { a: p.face + rel * fl, fl, swing: p.t >= a.wind && p.t < a.wind + a.act + 0.05, M };
+  }
+  return { a: p.face + fl * 0.95, fl };
+}
+function drawWeapon(ctx, p, meta, bob) {
+  const { a, fl, swing, M } = weaponAngle(p);
+  const R = ART_META.rig, lean = (meta.lean || 0) * Math.PI / 180, hy = meta.hy || 0;
+  const [ox, oy] = R.shoulder;
+  const lx = ox * Math.cos(lean) - oy * Math.sin(lean), ly = ox * Math.sin(lean) + oy * Math.cos(lean);
+  const sx = p.x + fl * lx, sy = p.y + R.hipY + hy + bob + ly;
   const ang = Math.atan2(Math.sin(a) * 0.62, Math.cos(a));
-  const sx = p.x + fl * 4, sy = p.y - 45 + bob;
-  const A = Art.players[p.i], bat = Art.s.bat;
-  const gx = sx + Math.cos(ang) * 18, gy = sy + Math.sin(ang) * 18;
-  ctx.save(); ctx.translate(gx, gy); ctx.rotate(ang); if (Math.cos(ang) < 0) ctx.scale(1, -1);
-  ctx.drawImage(bat.c, -bat.ax, -bat.ay, bat.w, bat.h); ctx.restore();
+  const A = Art.players[p.i];
+  if (swing && M) {
+    const r = M.pose === 'spin' ? 58 : 50;
+    ctx.strokeStyle = M.base === 'H' ? 'rgba(255,220,160,0.6)' : 'rgba(255,240,210,0.45)'; ctx.lineWidth = M.base === 'H' ? 9 : 6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.ellipse(p.x, p.y - 56, r, r * 0.64, 0, ang - 0.7, ang + 0.15); ctx.stroke();
+  }
+  if (p.weapon.type !== 'fists') {
+    const w = Art.s['w_' + p.weapon.type];
+    const reach = ART_META.rig.armLen + (p.state === 'atk' && M && M.pose === 'thrust' && p.t >= p.atk.wind ? 6 : 0);
+    const gx = sx + Math.cos(ang) * reach, gy = sy + Math.sin(ang) * reach;
+    ctx.save(); ctx.translate(gx, gy); ctx.rotate(ang); if (Math.cos(ang) < 0) ctx.scale(1, -1);
+    ctx.drawImage(w.c, -w.ax, -w.ay, w.w, w.h); ctx.restore();
+  }
   ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang - Math.PI / 2);
   ctx.drawImage(A.arm.c, -A.arm.ax, -A.arm.ay, A.arm.w, A.arm.h); ctx.restore();
 }
-
 function drawPlayer(ctx, p) {
   const A = Art.players[p.i];
   if (p.state === 'dead') {
@@ -257,66 +301,79 @@ function drawPlayer(ctx, p) {
     return;
   }
   const flip = Math.cos(p.face) < 0;
-  if (p.state === 'downed') {
-    ctx.save(); ctx.translate(p.x, p.y - 8); ctx.rotate(flip ? 1.45 : -1.45); ctx.scale(flip ? -1 : 1, 1);
-    ctx.drawImage(A.idle.c, -A.idle.ax, -A.idle.ay + 36, A.idle.w, A.idle.h); ctx.restore();
-    return;
-  }
-  const fr = p.moving ? Math.floor(p.anim) % 4 : -1;
-  const bob = fr < 0 ? Math.sin(G.t * 2.4 + p.i) * 0.6 : -Math.abs(Math.cos(fr / 4 * TAU)) * 2.2;
-  const hurt = p.hurtT > 0.12;
-  const s = fr < 0 ? (hurt ? A.idleFlash : A.idle) : (hurt ? A.flash[fr] : A.walk[fr]);
+  if (p.state === 'downed') { spr(ctx, A.down, p.x, p.y, flip); return; }
+  const pose = playerPose(p);
+  let s, meta = { bob: 0, lean: 0, hy: 0 }, bob = 0;
+  if (p.held && p.held.kind === 'furn' && !pose) {
+    const fr = p.moving ? Math.floor(p.anim * 0.7) % 4 : 0;
+    s = A.carry[fr];
+  } else if (pose) { s = A[pose]; meta = ART_META.poses[pose] || meta; bob = meta.bob || 0; }
+  else if (p.moving) { const fr = Math.floor(p.anim) % 6; s = A.walk[fr]; meta = ART_META.poses['walk' + fr]; bob = meta.bob; }
+  else { const k = Math.floor(G.t * 1.6 + p.i) % 2; s = A['idle' + k]; meta = ART_META.poses['idle' + k]; bob = meta.bob; }
+  if (p.hurtT > 0.12) s = flashOf(s);
+  const front = !(pose && meta.baked) && !p.held && p.state !== 'roll';
   const back = Math.sin(p.face) < -0.3;
-  const blink = p.inv > 0 && p.state !== 'roll' && Math.floor(G.t * 20) % 2;
-  if (blink) ctx.globalAlpha = 0.55;
-  if (back && !p.held && p.state !== 'roll') drawWeapon(ctx, p, bob);
+  if (p.inv > 0 && p.state !== 'roll' && p.state !== 'dash' && Math.floor(G.t * 20) % 2) ctx.globalAlpha = 0.55;
+  if (front && back) drawWeapon(ctx, p, meta, bob);
   if (p.state === 'roll') {
     const k = 1 - p.t / 0.3;
-    ctx.save(); ctx.translate(p.x, p.y - 26); ctx.rotate((flip ? -1 : 1) * k * TAU); ctx.scale(flip ? -0.85 : 0.85, 0.85);
-    ctx.drawImage(s.c, -s.ax, -s.ay + 30, s.w, s.h); ctx.restore();
-  } else spr(ctx, s, p.x, p.y + (fr < 0 ? bob * 0.3 : 0), flip);
-  if (!back && !p.held && p.state !== 'roll') drawWeapon(ctx, p, bob);
+    ctx.save(); ctx.translate(p.x, p.y - 24); ctx.rotate((flip ? -1 : 1) * k * TAU); ctx.scale(flip ? -1 : 1, 1);
+    ctx.drawImage(s.c, -s.ax, -s.ay + 24, s.w, s.h); ctx.restore();
+  } else {
+    let y = p.y;
+    if (p.state === 'atk' && p.atk.M.pose === 'leap') { const k = clamp(p.t / (p.atk.wind + 0.05), 0, 1); y -= Math.sin(k * Math.PI) * 26; }
+    if (p.state === 'atk' && p.atk.M.pose === 'spin' && p.t >= p.atk.wind && p.t < p.atk.wind + p.atk.act) spr(ctx, s, p.x, y, Math.floor(G.t * 18) % 2 ? !flip : flip);
+    else spr(ctx, s, p.x, y, flip);
+  }
+  if (front && !back) drawWeapon(ctx, p, meta, bob);
   ctx.globalAlpha = 1;
   if (p.held) {
-    if (p.held.kind === 'item') drawItem(ctx, p.held.ref.kind, p.x, p.y - 88, 0);
-    else {
-      const f = p.held.ref, fs = Art.s[f.sub], sc = 0.75;
-      ctx.drawImage(fs.c, p.x - (fs.ax + f.w / 2) * sc, p.y - 84 - (fs.ay + f.h) * sc, fs.w * sc, fs.h * sc);
-    }
-    const arm = A.arm;
-    for (const dx of [-7, 8]) { ctx.save(); ctx.translate(p.x + dx, p.y - 45); ctx.rotate(Math.PI + (dx < 0 ? 0.15 : -0.15)); ctx.drawImage(arm.c, -arm.ax, -arm.ay, arm.w, arm.h); ctx.restore(); }
+    if (p.held.kind === 'item') drawItem(ctx, p.held.ref.kind, p.x, p.y - 114, 0);
+    else { const f = p.held.ref, fs = Art.s[f.sub], sc = 0.72; ctx.drawImage(fs.c, p.x - (fs.ax + f.w / 2) * sc, p.y - 108 - (fs.ay + f.h) * sc, fs.w * sc, fs.h * sc); }
   }
 }
-
+function drawAlly(ctx, a) {
+  const A = Art.players[a.owner.i];
+  const s = a.moving ? A.walk[Math.floor(a.anim) % 6] : A.idle0;
+  const sil = s.sh || (s.sh = recolor(s, '#1c1228', 0.92));
+  ctx.globalAlpha = Math.min(1, a.t) * 0.9;
+  spr(ctx, a.hit > 0 ? A.atkL1.sh || (A.atkL1.sh = recolor(A.atkL1, '#1c1228', 0.92)) : sil, a.x, a.y, Math.cos(a.face) < 0);
+  ctx.globalAlpha = 1;
+}
 function drawEnemy(ctx, e) {
-  const A = Art.enemy[e.type];
+  const A = Art.enemy[e.type], d = EDEF[e.type];
   const flip = Math.cos(e.face) < 0;
-  const fr = Math.floor(e.anim) % A.walk.length;
+  let y = e.y;
+  if (d.float) y -= 6 + Math.sin(G.t * 3 + e.x) * 3;
+  if (e.state === 'dying') {
+    const k = e.t < 0.4 ? e.t / 0.4 : 1;
+    ctx.globalAlpha = k; spr(ctx, A.die, e.x, e.y, flip); ctx.globalAlpha = 1; return;
+  }
+  const fr = Math.floor(e.anim) % 4;
   const windy = e.state === 'wind' || e.state === 'crouch';
   let s = windy ? A.wind : A.walk[fr];
-  if (e.flash > 0) s = windy ? A.windFlash : A.flash[fr];
-  if (e.state === 'dying') ctx.globalAlpha = Math.max(0, e.t / 0.4);
-  let y = e.y;
-  if (e.state === 'leap') y -= Math.sin((1 - e.t / 0.42) * Math.PI) * 30;
-  if (e.state === 'dying') y += (1 - e.t / 0.4) * 8;
+  if (e.state === 'leap') { s = A.walk[1]; y -= Math.sin((1 - e.t / (e.type === 'wolf' ? 0.34 : 0.42)) * Math.PI) * 30; }
   if (e.state === 'cling' && e.host) y = e.host.y - 40;
-  spr(ctx, s, e.x, y, flip);
-  if (windy && e.flash <= 0 && Math.floor(G.t * 16) % 2) spr(ctx, A.windRed, e.x, y, flip);
-  ctx.globalAlpha = 1;
-  if (e.stun > 0 && e.state !== 'dying') {
-    const h = e.type === 'brute' ? 150 : e.type === 'walker' ? 112 : e.type === 'jumper' ? 52 : 34;
-    ctx.fillStyle = '#ffe08a'; ctx.strokeStyle = OL; ctx.lineWidth = 1.5;
+  if (e.frozen > 0) s = s.fz || (s.fz = recolor(s, '#a8d8ff', 0.55));
+  else if (e.flash > 0) s = flashOf(s);
+  if (e.hitT > 0 && e.state !== 'cling') {
+    ctx.save(); ctx.translate(e.x, y); ctx.rotate((flip ? 1 : -1) * 0.12 * e.hitT / 0.15); ctx.scale(flip ? -1 : 1, 1); ctx.drawImage(s.c, -s.ax, -s.ay, s.w, s.h); ctx.restore();
+  } else spr(ctx, s, e.x, y, flip);
+  if (windy && e.flash <= 0 && Math.floor(G.t * 16) % 2) spr(ctx, redOf(s), e.x, y, flip);
+  if (e.stun > 0 || e.frozen > 0) {
+    const h = d.h + 6;
+    ctx.fillStyle = e.frozen > 0 ? '#c8ecff' : '#ffe08a'; ctx.strokeStyle = OL; ctx.lineWidth = 1.5;
     for (let i = 0; i < 3; i++) { const a = G.t * 6 + i * 2.1; ctx.beginPath(); ctx.arc(e.x + Math.cos(a) * 13, y - h + Math.sin(a) * 4, 2.6, 0, TAU); ctx.fill(); ctx.stroke(); }
   }
-  if (e.hp < e.maxHp && e.state !== 'dying' && e.type === 'brute') {
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - 31, y - 172, 62, 8);
-    ctx.fillStyle = '#c9493a'; ctx.fillRect(e.x - 30, y - 171, 60 * Math.max(0, e.hp / e.maxHp), 6);
+  if (e.hp < e.maxHp && (e.type === 'brute')) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - 31, y - d.h - 22, 62, 8);
+    ctx.fillStyle = '#c9493a'; ctx.fillRect(e.x - 30, y - d.h - 21, 60 * Math.max(0, e.hp / e.maxHp), 6);
   }
 }
 
 // ---------- Свет ----------
 function drawLight(ctx, dk) {
-  const lx = Render.lx, lc = Render.lc;
+  const lx = Render.lx, lc = Render.lc, V = Render.view;
   lx.setTransform(1, 0, 0, 1, 0, 0);
   lx.globalCompositeOperation = 'source-over';
   const dusk = G.phase === 'dusk' ? 1 - G.phaseT / DUSK_LEN : 0;
@@ -325,6 +382,7 @@ function drawLight(ctx, dk) {
   lx.globalCompositeOperation = 'destination-out';
   worldTransform(lx, 0.25);
   const light = (x, y, r, a) => {
+    if (x + r < V.vx0 || x - r > V.vx1 || y + r < V.vy0 || y - r > V.vy1) return;
     const g = lx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.55, `rgba(0,0,0,${a * 0.7})`); g.addColorStop(1, 'rgba(0,0,0,0)');
     lx.fillStyle = g; lx.beginPath(); lx.arc(x, y, r, 0, TAU); lx.fill();
@@ -332,31 +390,39 @@ function drawLight(ctx, dk) {
   const fl = 1 + Math.sin(G.t * 11) * 0.03 + Math.sin(G.t * 4.3) * 0.04;
   light(World.fire.x, World.fire.y - 10, 330 * fl, 1);
   light(World.lantern.x, World.lantern.y, 230, 0.9);
+  if (World.gen.on) for (const f of World.floods) light(f.ox, f.oy - 40, 340, 0.95);
+  for (const p of World.props) if (p.spr === 'lamp' && p.on) { const fk = Math.sin(G.t * 23 + p.x) > -0.95 ? 1 : 0.3; light(p.ox + 19, p.oy - 10, 190 * fk, 0.85); }
   for (const p of G.players) if (p.state !== 'dead') light(p.x, p.y - 30, 135, 0.75);
-  for (const pr of G.projs) light(pr.x, pr.y, 40, 0.3);
+  for (const f of G.fires) light(f.x, f.y, f.r * 2.6, 0.9 * Math.min(1, f.t));
+  for (const f of G.flashes) light(f.x, f.y, f.r, 1);
+  for (const q of G.eprojs) if (q.kind === 'orb') light(q.x, q.y, 90, 0.7);
+  for (const pr of G.projs) if (pr.kind === 'molotov') light(pr.x, pr.y, 80, 0.7);
   lx.globalCompositeOperation = 'source-over';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(lc, 0, 0, Render.W, Render.H);
-  // тёплое свечение костра
   worldTransform(ctx);
   ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(World.fire.x, World.fire.y - 10, 0, World.fire.x, World.fire.y - 10, 260 * fl);
-  g.addColorStop(0, `rgba(255,140,40,${0.22 * dk})`); g.addColorStop(1, 'rgba(255,120,30,0)');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(World.fire.x, World.fire.y - 10, 260 * fl, 0, TAU); ctx.fill();
+  const glow = (x, y, r, col, a) => { const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(${col},${a})`); g.addColorStop(1, `rgba(${col},0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); };
+  glow(World.fire.x, World.fire.y - 10, 260 * fl, '255,140,40', 0.22 * dk);
+  for (const f of G.fires) glow(f.x, f.y, f.r * 2, '255,120,30', 0.25 * dk);
   ctx.globalCompositeOperation = 'source-over';
 }
 
 // ---------- Поверх темноты ----------
 function drawOverlay(ctx, dk) {
-  // телеграфы атак — видны всегда
   for (const e of G.enemies) {
+    if (e.hidden) continue;
+    const d = EDEF[e.type];
     if (e.state === 'wind') {
-      const k = 1 - e.t / EDEF[e.type].wind;
-      if (e.type === 'brute') {
-        const cx = e.x + Math.cos(e.face) * 34, cy = e.y + Math.sin(e.face) * 22;
-        ctx.fillStyle = `rgba(220,40,20,${0.15 + 0.25 * k})`; ctx.beginPath(); ctx.ellipse(cx, cy, 82 * k, 50 * k, 0, 0, TAU); ctx.fill();
-        ctx.strokeStyle = 'rgba(255,80,50,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(cx, cy, 82, 50, 0, 0, TAU); ctx.stroke();
+      const k = 1 - e.t / d.wind;
+      if (d.slam) {
+        const cx = e.x + Math.cos(e.face) * d.slam * 0.4, cy = e.y + Math.sin(e.face) * d.slam * 0.26;
+        ctx.fillStyle = `rgba(220,40,20,${0.15 + 0.25 * k})`; ctx.beginPath(); ctx.ellipse(cx, cy, d.slam * k, d.slam * 0.6 * k, 0, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,80,50,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(cx, cy, d.slam, d.slam * 0.6, 0, 0, TAU); ctx.stroke();
+      } else if (e.shot) {
+        ctx.strokeStyle = e.shot === 'orb' ? `rgba(180,140,255,${0.3 + 0.6 * k})` : `rgba(230,230,210,${0.3 + 0.5 * k})`; ctx.lineWidth = 3; ctx.setLineDash([6, 8]);
+        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(e.face) * 260, e.y + Math.sin(e.face) * 260); ctx.stroke(); ctx.setLineDash([]);
       } else {
         ctx.strokeStyle = `rgba(255,70,40,${0.4 + 0.5 * k})`; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r + 16, (e.r + 16) * 0.55, 0, e.face - 0.8, e.face + 0.8); ctx.stroke();
@@ -366,25 +432,45 @@ function drawOverlay(ctx, dk) {
       ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + e.leapDx * 170, e.y + e.leapDy * 170); ctx.stroke(); ctx.setLineDash([]);
     }
   }
-  // светящиеся глаза в темноте
+  // снаряды врагов
+  for (const q of G.eprojs) {
+    if (q.kind === 'orb') { ctx.fillStyle = 'rgba(180,140,255,0.35)'; ctx.beginPath(); ctx.arc(q.x, q.y - 30, 11, 0, TAU); ctx.fill(); ctx.fillStyle = '#e8dcff'; ctx.beginPath(); ctx.arc(q.x, q.y - 30, 5, 0, TAU); ctx.fill(); }
+    else { ctx.fillStyle = '#e8e4d8'; ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(q.x, q.y - 16, 5, 0, TAU); ctx.fill(); ctx.stroke(); }
+  }
+  // выстрелы, молнии, волны
+  for (const t of G.tracers) { ctx.strokeStyle = `rgba(255,230,160,${t.t / 0.08})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(t.x0, t.y0); ctx.lineTo(t.x1, t.y1); ctx.stroke(); }
+  for (const b of G.bolts) {
+    for (const [w, col] of [[6, 'rgba(120,140,255,0.5)'], [2.4, '#f4f0ff']]) {
+      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
+      for (let i = 0; i < b.pts.length - 1; i++) {
+        const a = b.pts[i], c = b.pts[i + 1];
+        ctx.moveTo(a.x, a.y);
+        for (let k = 1; k <= 5; k++) ctx.lineTo(lerp(a.x, c.x, k / 5) + (k < 5 ? rand(-9, 9) : 0), lerp(a.y, c.y, k / 5) + (k < 5 ? rand(-9, 9) : 0));
+      }
+      ctx.stroke();
+    }
+  }
+  for (const w of G.waves) {
+    ctx.strokeStyle = `rgba(${w.col},${w.t * 2})`; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.ellipse(w.x, w.y, w.r, w.r * 0.6, 0, w.a - w.arc, w.a + w.arc); ctx.stroke();
+  }
   if (dk > 0.3) {
     ctx.globalCompositeOperation = 'lighter';
     for (const e of G.enemies) {
-      if (e.state === 'dying') continue;
+      if (e.state === 'dying' || e.hidden) continue;
       const flip = Math.cos(e.face) < 0 ? -1 : 1;
       let y = e.y; if (e.state === 'cling' && e.host) y = e.host.y - 40;
-      if (e.state === 'leap') y -= Math.sin((1 - e.t / 0.42) * Math.PI) * 30;
-      ctx.fillStyle = e.type === 'clinger' ? `rgba(255,60,40,${dk})` : `rgba(255,225,130,${dk * 0.95})`;
-      for (const [ex, ey] of EYE[e.type]) { ctx.beginPath(); ctx.arc(e.x + ex * flip, y + ey, 1.8, 0, TAU); ctx.fill(); }
+      if (EDEF[e.type].float) y -= 6;
+      ctx.fillStyle = e.type === 'clinger' || e.type === 'spider' ? `rgba(255,60,40,${dk})` : e.type === 'void' ? `rgba(190,150,255,${dk})` : `rgba(255,225,130,${dk * 0.95})`;
+      for (const [ex, ey] of EYE[e.type]) { ctx.beginPath(); ctx.arc(e.x + ex * flip, y + ey, e.type === 'titan' ? 2.6 : 1.8, 0, TAU); ctx.fill(); }
     }
     ctx.globalCompositeOperation = 'source-over';
   }
-  // маркеры и подсказки игроков
   ctx.textAlign = 'center';
   for (const p of G.players) {
     if (p.state === 'dead') continue;
     const col = PAL[p.i].accent;
-    const top = p.held ? p.y - 132 : p.y - 100;
+    const top = p.held ? p.y - 156 : p.y - 120;
     ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(p.x - 6, top - 8); ctx.lineTo(p.x + 6, top - 8); ctx.lineTo(p.x, top); ctx.fill();
     ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.stroke();
     if (p.state === 'downed') {
@@ -393,17 +479,16 @@ function drawOverlay(ctx, dk) {
       ctx.strokeStyle = '#d6493a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 40, 18, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
       ctx.fillStyle = '#ffd0c0'; ctx.font = `bold 18px ${FONT}`; ctx.fillText('!', p.x, p.y - 34);
       const o = G.players[1 - p.i];
-      if (o.reviveTgt === p) {
-        ctx.strokeStyle = '#9fe39a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 40, 25, -Math.PI / 2, -Math.PI / 2 + TAU * o.revive / 2.2); ctx.stroke();
-      }
+      if (o.reviveTgt === p) { ctx.strokeStyle = '#9fe39a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 40, 25, -Math.PI / 2, -Math.PI / 2 + TAU * o.revive / (o.sk.med >= 2 ? 1.1 : 2.2)); ctx.stroke(); }
     }
-    if (p.hint) {
+    if (p.search) { ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(p.x, p.y - 128, 12, 0, TAU); ctx.stroke(); ctx.strokeStyle = '#e8d08a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 128, 12, -Math.PI / 2, -Math.PI / 2 + TAU * p.search.t / 1.2); ctx.stroke(); }
+    if (p.state === 'atk' && p.comboN >= 2 && p.atk.hitsDone > 0) { ctx.font = `bold 13px ${FONT}`; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(p.atk.M.name, p.x, top - 14); ctx.fillStyle = '#ffe8a8'; ctx.fillText(p.atk.M.name, p.x, top - 14); }
+    else if (p.hint) {
       ctx.font = `bold 13px ${FONT}`;
       const w = ctx.measureText(p.hint).width + 12;
       ctx.fillStyle = 'rgba(10,8,6,0.7)'; ctx.fillRect(p.x - w / 2, top - 32, w, 19);
       ctx.fillStyle = '#f0e4c4'; ctx.fillText(p.hint, p.x, top - 18);
     }
-    // предпросмотр баррикады
     if (!p.held && p.state === 'normal' && !p.hint && Input.ctrls[p.i].down.build) {
       const b = barricadeSpec(p);
       ctx.strokeStyle = canPlace(b.x, b.y, b.w, b.h, null, false) ? 'rgba(160,255,140,0.7)' : 'rgba(255,90,70,0.7)';
@@ -454,29 +539,36 @@ function drawHUD(ctx) {
   ctx.save(); ctx.scale(u, u);
   const W = Render.W / u;
   ctx.textBaseline = 'alphabetic';
-  for (const p of G.players) drawPlayerPanel(ctx, p, p.i === 0 ? 12 : W - 12 - 300, 12);
+  for (const p of G.players) drawPlayerPanel(ctx, p, p.i === 0 ? 12 : W - 12 - 330, 12);
 
   // часы
-  const cw = 320, cx = W / 2 - cw / 2;
+  const cw = 300, cx = W / 2 - cw / 2;
   panel(ctx, cx, 8, cw, 56);
   let label, k, col, ic;
   if (G.phase === 'day') { label = `День ${G.day}`; k = G.phaseT / DAY_LEN; col = '#e6c76a'; ic = 'icon_sun'; }
-  else if (G.phase === 'dusk') { label = `Сумерки · ночь через ${Math.ceil(DUSK_LEN - G.phaseT)} с`; k = G.phaseT / DUSK_LEN; col = '#e08a4a'; ic = 'icon_sun'; }
-  else { label = `Ночь ${G.day} · до рассвета ${Math.ceil(NIGHT_LEN - G.phaseT)} с`; k = G.phaseT / NIGHT_LEN; col = '#7a8ad6'; ic = 'icon_moon'; }
+  else if (G.phase === 'dusk') { label = `Сумерки · ${Math.ceil(DUSK_LEN - G.phaseT)} с`; k = G.phaseT / DUSK_LEN; col = '#e08a4a'; ic = 'icon_sun'; }
+  else { label = `Ночь ${G.day} · ${Math.ceil(NIGHT_LEN - G.phaseT)} с`; k = G.phaseT / NIGHT_LEN; col = '#7a8ad6'; ic = 'icon_moon'; }
   icon(ctx, ic, cx + 30, 36, 34);
   inkText(ctx, label, cx + 54, 32, '#f2e6c8', 17);
   bar(ctx, cx + 54, 41, cw - 70, 9, k, col);
+  const gn = World.gen;
+  inkText(ctx, `⚡${gn.fuel}${gn.on ? ' ВКЛ' : ''}`, cx + cw - 14, 30, gn.on ? '#b8ff9a' : '#a89c80', 12, true, 'right');
 
   // ресурсы
-  const rw = 270, rx = W / 2 - rw / 2, ry = 720 - 50;
+  const items = [['wood', G.team.wood], ['scrap', G.team.scrap], ['cloth', G.team.cloth], ['fuel', G.team.fuel], ['ammo', G.team.ammo], ['band', G.team.band]];
+  const rw = items.length * 74 + 16, rx = W / 2 - rw / 2, ry = 720 - 50;
   panel(ctx, rx, ry, rw, 40);
-  icon(ctx, 'wood', rx + 30, ry + 20, 26);
-  inkText(ctx, `Дерево: ${G.team.wood}`, rx + 48, ry + 26, '#e6cfa0', 16);
-  icon(ctx, 'scrap', rx + 156, ry + 20, 24);
-  inkText(ctx, `Хлам: ${G.team.scrap}`, rx + 172, ry + 26, '#c8d2d8', 16);
+  items.forEach(([n, v], i) => { icon(ctx, n, rx + 26 + i * 74, ry + 20, 24); inkText(ctx, String(v), rx + 44 + i * 74, ry + 27, n === 'band' ? '#9fe39a' : RES[n].col, 16); });
 
+  // Титан
+  const titan = G.enemies.find((e) => e.type === 'titan' && e.state !== 'dying');
+  if (titan) {
+    const bw = 420, bx = W / 2 - bw / 2;
+    inkText(ctx, 'ТИТАН', W / 2, 88, '#ff8a6a', 15, true, 'center');
+    bar(ctx, bx, 94, bw, 12, titan.hp / titan.maxHp, '#c43e30');
+  }
   // сообщения
-  let my = 98;
+  let my = titan ? 130 : 98;
   for (const m of G.msgs) {
     ctx.globalAlpha = Math.min(1, m.t);
     ctx.font = `bold 18px ${FONT}`; ctx.textAlign = 'center';
@@ -485,7 +577,6 @@ function drawHUD(ctx) {
     my += 26;
   }
   ctx.globalAlpha = 1;
-
   if (G.showFps) {
     ctx.textAlign = 'left'; ctx.font = `12px ${FONT}`; ctx.fillStyle = 'rgba(240,230,200,0.6)';
     ctx.fillText(`FPS ${Render.fps.toFixed(0)} · монстров ${G.enemies.length} · ${Render.W}x${Render.H} · F2 качество · F3 скрыть`, 14, 712);
@@ -493,57 +584,113 @@ function drawHUD(ctx) {
   ctx.restore();
 }
 
+function slotBox(ctx, x, y, s, iconName, label, cdK, keyName, dim) {
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x, y, s, s);
+  if (iconName) { if (dim) ctx.globalAlpha = 0.35; icon(ctx, iconName, x + s / 2, y + s / 2, s - 4); ctx.globalAlpha = 1; }
+  if (cdK > 0) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x, y + s * (1 - cdK), s, s * cdK); }
+  ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.strokeRect(x, y, s, s);
+  if (keyName) inkText(ctx, keyName, x + s - 2, y + s - 2, '#f2e6c8', 10, true, 'right');
+}
+
 function drawPlayerPanel(ctx, p, x, y) {
   const pal = PAL[p.i];
-  panel(ctx, x, y, 300, 96);
-  // портрет
-  const px = x + 46, py = y + 48;
+  panel(ctx, x, y, 330, 104);
+  const px = x + 46, py = y + 50;
   ctx.save(); ctx.beginPath(); ctx.arc(px, py, 33, 0, TAU);
   ctx.fillStyle = p.state === 'dead' ? '#2a1a16' : '#3a3024'; ctx.fill(); ctx.clip();
   const h = Art.players[p.i].head;
   if (p.state === 'dead' || p.state === 'downed') ctx.globalAlpha = 0.45;
-  ctx.drawImage(h.c, px - 2 - h.ax * 1.5, py + 22 - h.ay * 1.5, h.w * 1.5, h.h * 1.5);
+  ctx.drawImage(h.c, px - h.ax * 2.4, py + 24 - h.ay * 2.4, h.w * 2.4, h.h * 2.4);
   ctx.restore();
   ctx.strokeStyle = OL; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(px, py, 33, 0, TAU); ctx.stroke();
   ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py, 31, 0, TAU); ctx.stroke();
-  // уровень
   ctx.fillStyle = pal.accent; ctx.beginPath(); ctx.arc(px + 24, py + 24, 11, 0, TAU); ctx.fill();
   ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke();
   ctx.fillStyle = '#1a110b'; ctx.font = `bold 12px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText(p.lvl, px + 24, py + 28);
 
-  const bx = x + 90, bw = 198;
+  const bx = x + 90, bw = 160;
   inkText(ctx, pal.name, bx, y + 24, pal.accent, 15);
-  ctx.font = `11px ${FONT}`; ctx.fillStyle = '#a89c80'; ctx.textAlign = 'right';
-  if (!p.clingers.length) ctx.fillText(Input.ctrls[p.i].pad ? 'геймпад' : 'клавиатура', x + 288, y + 23);
-  else inkText(ctx, `ПАРАЗИТ ×${p.clingers.length}`, x + 288, y + 23, '#ff9a8a', 12, true, 'right');
+  if (p.clingers.length) inkText(ctx, `ПАРАЗИТ ×${p.clingers.length}`, bx + bw, y + 24, '#ff9a8a', 11, true, 'right');
+  else if (p.pts > 0) inkText(ctx, `★ ${p.pts} [${Input.btn(p.i, 'menu')}]`, bx + bw, y + 24, pal.accent, 12, true, 'right');
   if (p.state === 'dead') { inkText(ctx, 'Погиб — вернётся на рассвете', bx, y + 56, '#ff8a7a', 13); return; }
   bar(ctx, bx, y + 32, bw, 14, p.hp / p.maxHp, p.state === 'downed' ? '#7a2a22' : '#c43e30');
-  inkText(ctx, p.state === 'downed' ? `БЕЗ СОЗНАНИЯ ${Math.ceil(p.bleed)} с` : `${Math.ceil(p.hp)} / ${p.maxHp}`, bx + 6, y + 44, '#fff', 11);
+  inkText(ctx, p.state === 'downed' ? `БЕЗ СОЗНАНИЯ ${Math.ceil(p.bleed)}` : `${Math.ceil(p.hp)}/${p.maxHp}`, bx + 5, y + 44, '#fff', 11);
   bar(ctx, bx, y + 50, bw, 7, p.st / 100, '#d6c26a');
   bar(ctx, bx, y + 61, bw, 5, p.xp / xpNeed(p.lvl), '#8a7ad6');
-  const sk = [['icon_str', p.sk.str], ['icon_agi', p.sk.agi], ['icon_eng', p.sk.eng]];
-  sk.forEach(([n, v], i) => { icon(ctx, n, bx + 9 + i * 44, y + 80, 18); inkText(ctx, String(v), bx + 21 + i * 44, y + 85, '#e6dcc4', 13); });
-  if (p.pts > 0) inkText(ctx, `★ ${p.pts}  [${Input.btn(p.i, 'menu')}]`, x + 288, y + 86, pal.accent, 13, true, 'right');
+  // оружие
+  const W = wep(p), wx = x + 258, wy = y + 14;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(wx, wy, 62, 44); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.strokeRect(wx, wy, 62, 44);
+  if (p.weapon.type !== 'fists') {
+    const s = Art.s['w_' + p.weapon.type], k = Math.min(56 / s.w, 30 / s.h);
+    ctx.save(); ctx.translate(wx + 31, wy + 20); ctx.rotate(-0.35); ctx.drawImage(s.c, -s.w * k / 2, -s.h * k / 2, s.w * k, s.h * k); ctx.restore();
+    if (W.durab < Infinity) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(wx + 4, wy + 38, 54, 3); ctx.fillStyle = p.weapon.dur / W.durab > 0.3 ? '#b8d080' : '#e06a3a'; ctx.fillRect(wx + 4, wy + 38, 54 * p.weapon.dur / W.durab, 3); }
+  } else inkText(ctx, '✊', wx + 31, wy + 30, '#e0c8a4', 20, true, 'center');
+  ctx.font = `10px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'center'; ctx.fillText(W.gun ? `${W.name} · ${G.team.ammo}` : W.name, wx + 31, wy + 56);
+  // слоты способностей
+  for (let k = 0; k < 3; k++) {
+    const id = p.slots[k], sx = bx + k * 40, sy = y + 70;
+    slotBox(ctx, sx, sy, 30, id ? ABIL[id].icon : null, '', id && p.abCd[id] > 0 ? p.abCd[id] / ABIL[id].cd : 0, Input.btn(p.i, 'ab' + (k + 1)));
+  }
+  if (p.state === 'atk' && p.comboN >= 2) inkText(ctx, `Комбо ×${p.comboN}`, bx + 124, y + 90, '#ffe08a', 13);
 
-  if (p.menu) {
-    const my = y + 104;
-    panel(ctx, x, my, 300, 214);
-    inkText(ctx, `Навыки — очков: ${p.pts}`, x + 14, my + 26, pal.accent, 15);
+  if (p.menu) drawSkillMenu(ctx, p, x, y + 112);
+  if (p.craft) drawCraftMenu(ctx, p, x, y + 112);
+}
+
+function drawSkillMenu(ctx, p, x, my) {
+  const pal = PAL[p.i];
+  const ids = Object.keys(ABIL);
+  const hgt = p.menuTab === 0 ? 50 + SKILLS.length * 50 : 70 + ids.length * 30;
+  panel(ctx, x, my, 330, hgt);
+  inkText(ctx, p.menuTab === 0 ? `Навыки · очков: ${p.pts}` : 'Способности', x + 14, my + 24, pal.accent, 15);
+  inkText(ctx, p.menuTab === 0 ? '◀▶ способности' : '◀▶ навыки', x + 318, my + 24, '#8f846c', 11, false, 'right');
+  if (p.menuTab === 0) {
     SKILLS.forEach((s, i) => {
-      const yy = my + 36 + i * 54, lv = p.sk[s.id], sel = p.menuSel === i;
-      if (sel) { ctx.fillStyle = 'rgba(255,230,170,0.1)'; ctx.fillRect(x + 8, yy, 284, 50); ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.strokeRect(x + 8, yy, 284, 50); }
-      icon(ctx, ['icon_str', 'icon_agi', 'icon_eng'][i], x + 30, yy + 25, 32);
-      inkText(ctx, s.name, x + 52, yy + 20, '#f2e6c8', 14);
-      for (let k = 0; k < 5; k++) {
-        ctx.fillStyle = k < lv ? pal.accent : 'rgba(255,255,255,0.12)'; ctx.fillRect(x + 176 + k * 22, yy + 10, 18, 9);
-        ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.strokeRect(x + 176 + k * 22, yy + 10, 18, 9);
-      }
-      ctx.font = `12px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'left';
-      ctx.fillText(lv < 5 ? `${lv + 1}: ${s.lv[lv]} (${skillCost(lv)} оч.)` : 'Максимум', x + 52, yy + 39);
+      const yy = my + 32 + i * 50, lv = p.sk[s.id], sel = p.menuSel === i;
+      if (sel) { ctx.fillStyle = 'rgba(255,230,170,0.1)'; ctx.fillRect(x + 8, yy, 314, 46); ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.strokeRect(x + 8, yy, 314, 46); }
+      icon(ctx, s.icon, x + 30, yy + 23, 30);
+      inkText(ctx, s.name, x + 52, yy + 18, '#f2e6c8', 14);
+      for (let k = 0; k < 5; k++) { ctx.fillStyle = k < lv ? pal.accent : 'rgba(255,255,255,0.12)'; ctx.fillRect(x + 206 + k * 22, yy + 9, 18, 9); ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.strokeRect(x + 206 + k * 22, yy + 9, 18, 9); }
+      ctx.font = `11px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'left';
+      ctx.fillText(lv < 5 ? `${lv + 1}: ${s.lv[lv]} (${skillCost(lv)} оч.)` : 'Максимум', x + 52, yy + 36);
     });
     ctx.font = `11px ${FONT}`; ctx.fillStyle = '#8f846c'; ctx.textAlign = 'left';
-    ctx.fillText(`${Input.btn(p.i, 'attack')} — купить · ${Input.btn(p.i, 'roll')}/${Input.btn(p.i, 'menu')} — закрыть`, x + 14, my + 204);
+    ctx.fillText(`${Input.btn(p.i, 'light')} — изучить · ${Input.btn(p.i, 'roll')} — закрыть`, x + 14, my + hgt - 8);
+  } else {
+    ids.forEach((id, i) => {
+      const yy = my + 34 + i * 30, A = ABIL[id], ok = abilityUnlocked(p, id), sel = p.abSel === i;
+      if (sel) { ctx.fillStyle = 'rgba(255,230,170,0.1)'; ctx.fillRect(x + 8, yy - 2, 314, 28); ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.strokeRect(x + 8, yy - 2, 314, 28); }
+      if (!ok) ctx.globalAlpha = 0.4;
+      icon(ctx, A.icon, x + 24, yy + 12, 24);
+      inkText(ctx, A.name, x + 42, yy + 11, '#f2e6c8', 13);
+      ctx.font = `10px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'left';
+      ctx.fillText(ok ? A.desc : `Нужно: ${SKILLS.find((s) => s.id === A.req[0]).name} ${A.req[1]}`, x + 42, yy + 23);
+      const sl = p.slots.indexOf(id);
+      if (sl >= 0) inkText(ctx, Input.btn(p.i, 'ab' + (sl + 1)), x + 316, yy + 16, pal.accent, 12, true, 'right');
+      ctx.globalAlpha = 1;
+    });
+    ctx.font = `11px ${FONT}`; ctx.fillStyle = '#8f846c'; ctx.textAlign = 'left';
+    ctx.fillText(`Нажми ${Input.btn(p.i, 'ab1')} / ${Input.btn(p.i, 'ab2')} / ${Input.btn(p.i, 'ab3')}, чтобы назначить в слот`, x + 14, my + hgt - 10);
   }
+}
+
+function drawCraftMenu(ctx, p, x, my) {
+  const pal = PAL[p.i], hgt = 50 + RECIPES.length * 40;
+  panel(ctx, x, my, 330, hgt);
+  inkText(ctx, 'Верстак', x + 14, my + 24, pal.accent, 15);
+  RECIPES.forEach((r, i) => {
+    const yy = my + 32 + i * 40, sel = p.craftSel === i;
+    const can = Object.entries(r.cost).every(([k, v]) => G.team[k] >= v) && (!r.eng || p.sk.eng >= r.eng);
+    if (sel) { ctx.fillStyle = 'rgba(255,230,170,0.1)'; ctx.fillRect(x + 8, yy, 314, 36); ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.strokeRect(x + 8, yy, 314, 36); }
+    if (!can) ctx.globalAlpha = 0.45;
+    inkText(ctx, r.name, x + 16, yy + 16, '#f2e6c8', 13);
+    ctx.font = `10px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'left'; ctx.fillText(r.desc, x + 16, yy + 30);
+    let cx = x + 314;
+    for (const [k, v] of Object.entries(r.cost).reverse()) { inkText(ctx, String(v), cx, yy + 23, RES[k].col, 13, true, 'right'); icon(ctx, k, cx - 22, yy + 18, 18); cx -= 46; }
+    ctx.globalAlpha = 1;
+  });
+  ctx.font = `11px ${FONT}`; ctx.fillStyle = '#8f846c'; ctx.textAlign = 'left';
+  ctx.fillText(`${Input.btn(p.i, 'light')} — сделать · ${Input.btn(p.i, 'roll')} — закрыть`, x + 14, my + hgt - 8);
 }
 
 // ---------- Экраны ----------
@@ -563,8 +710,8 @@ function drawScreen(title, lines, sub, art) {
     put2('brute_wind', 70, 2.4, false, 0.55, true);
     put2('walker_walk1', W - 70, 2.9, true, 0.55, true);
     ctx.globalAlpha = 1;
-    put2('p0_idle', 120, 2.5, false, 1);
-    put2('p1_idle', W - 120, 2.5, true, 1);
+    put2('p0_idle0', 120, 2.1, false, 1);
+    put2('p1_idle0', W - 120, 2.1, true, 1);
     const g = ctx.createLinearGradient(0, 560, 0, 720); g.addColorStop(0, 'rgba(8,7,6,0)'); g.addColorStop(1, 'rgba(8,7,6,0.55)');
     ctx.fillStyle = g; ctx.fillRect(0, 560, W, 160);
   }

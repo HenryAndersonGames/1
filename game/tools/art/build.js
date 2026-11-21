@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.resolve(__dirname, '../..');
 const out = {};
-const mods = ['chars', 'creatures', 'nature', 'props'];
+const mods = ['chars', 'creatures', 'nature', 'props', 'places', 'icons'];
 for (const m of mods) {
   const p = path.join(__dirname, m + '.js');
   if (fs.existsSync(p)) require(p).build(out);
@@ -13,8 +13,10 @@ for (const m of mods) {
 const artDir = path.join(ROOT, 'art');
 fs.mkdirSync(artDir, { recursive: true });
 for (const f of fs.readdirSync(artDir)) if (f.endsWith('.svg')) fs.unlinkSync(path.join(artDir, f));
+const meta = out.__meta || {};
+delete out.__meta;
 for (const [k, v] of Object.entries(out)) fs.writeFileSync(path.join(artDir, k + '.svg'), v);
-const js = "'use strict';\n// Сгенерировано tools/art/build.js — не редактировать вручную.\nconst ART_SVG = " + JSON.stringify(out) + ';\n';
+const js = "'use strict';\n// Сгенерировано tools/art/build.js — не редактировать вручную.\nconst ART_META = " + JSON.stringify(meta) + ";\nconst ART_SVG = " + JSON.stringify(out) + ';\n';
 fs.writeFileSync(path.join(ROOT, 'js', 'artdata.js'), js);
 // лист предпросмотра
 const sc = Number(process.env.SCALE || 3);

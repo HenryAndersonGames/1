@@ -40,7 +40,7 @@ function wTorso() {
     inner: line('M18.6 -37.4L19 -35.6M20.4 -37.5L20.6 -35.4M22.2 -37.6L22.2 -35.4M24 -37.7L23.6 -35.6', 0.6, '#e8dcb4') });
   return s;
 }
-function walkerFrame(ph, wind) {
+function walkerBody(ph, wind) {
   const s = Math.sin(ph), bob = -Math.abs(Math.cos(ph)) * 2;
   const la = wind ? 0 : s * 20, aa = wind ? -150 : -s * 12 - 14;
   let o = '';
@@ -49,7 +49,7 @@ function walkerFrame(ph, wind) {
   o += g(`translate(3 -40) rotate(${f(la)})`, wLeg(false));
   o += g(`translate(0 ${f(-40 + bob)})`, wTorso());
   o += g(`translate(9 ${f(-74 + bob)}) rotate(${f(wind ? aa - 8 : aa - 4)})`, wArm(false));
-  return svg(-40, -146, 82, 150, o);
+  return o;
 }
 
 // ================= Прыгун =================
@@ -80,7 +80,7 @@ function jBody() {
   s += line('M27 -11Q30.6 -12.6 33.6 -10.6', 1, INK);
   return s;
 }
-function jumperFrame(ph, crouch) {
+function jumperBody(ph, crouch) {
   const s = Math.sin(ph), bob = crouch ? 7 : -Math.abs(Math.cos(ph)) * 2;
   const la = crouch ? 0 : s * 20;
   let o = '';
@@ -89,11 +89,11 @@ function jumperFrame(ph, crouch) {
   o += g(`translate(0 ${f(-24 + bob)}) rotate(${crouch ? 5 : 0})`, jBody());
   o += g(`translate(-19 ${f(-21 + bob * 0.4)}) rotate(${f(crouch ? -38 : -la)})`, jHind(false));
   o += g(`translate(13 ${f(-21 + bob * 0.4)}) rotate(${f(crouch ? 30 : la)})`, jFront(false));
-  return svg(-46, -48, 92, 52, o);
+  return o;
 }
 
 // ================= Прилипала =================
-function clingerFrame(ph) {
+function clingerBody(ph) {
   let o = '';
   const legs = (side, dk) => {
     let s = '';
@@ -114,7 +114,7 @@ function clingerFrame(ph) {
   o += dot(10, -12.6, 1.3, '#d4302a') + dot(10.4, -13, 0.4, '#ffd0c0') + dot(7.6, -13.6, 0.9, '#d4302a') + dot(11.6, -10, 0.8, '#d4302a');
   o += L.limb([[11.6, -9], [15, -8], [14.6, -5.4]], 1.2, '#cdbb98', { sw: 0.8 }) + L.limb([[12, -12.4], [15.6, -13], [16, -10.6]], 1.2, '#cdbb98', { sw: 0.8 });
   o += legs(1, false);
-  return svg(-22, -26, 44, 30, o);
+  return o;
 }
 
 // ================= Тяжеловес =================
@@ -151,7 +151,7 @@ function bBody() {
   s += shape(smooth([[39.6, -55.6], [41, -62.6, 1], [42.6, -56.6]]), BONE, { sw: 0.9, flat: true, nodrop: true });
   return s;
 }
-function bruteFrame(ph, wind) {
+function bruteBody(ph, wind) {
   const s = Math.sin(ph), bob = -Math.abs(Math.cos(ph)) * 2;
   const la = wind ? 0 : s * 12, aa = wind ? -165 : -s * 8;
   let o = '';
@@ -160,20 +160,32 @@ function bruteFrame(ph, wind) {
   o += g(`translate(13 -34) rotate(${f(la)})`, bLeg(false));
   o += g(`translate(0 ${f(-34 + bob)})`, bBody());
   o += g(`translate(20 ${f(-66 + bob)}) rotate(${f(aa)})`, bArm(false));
-  return svg(-62, -168, 130, 172, o);
+  return o;
 }
 
+const W = {
+  walker: (ph, w) => svg(-40, -146, 82, 150, walkerBody(ph, w)),
+  jumper: (ph, w) => svg(-46, -48, 92, 52, jumperBody(ph, w)),
+  clinger: (ph) => svg(-22, -26, 44, 30, clingerBody(ph)),
+  brute: (ph, w) => svg(-62, -168, 130, 172, bruteBody(ph, w)),
+};
+const N = require('./creatures2');
 function build(out) {
+  out.walker_die = svg(-150, -80, 186, 86, g('translate(0 -36) rotate(-84)', walkerBody(0.4, false)));
+  out.brute_die = svg(-190, -156, 214, 162, g('translate(0 -60) rotate(-82)', bruteBody(0.4, false)));
+  out.jumper_die = svg(-50, -34, 100, 38, g('translate(0 6) rotate(10)', jumperBody(0, true)));
+  out.clinger_die = svg(-22, -26, 44, 30, g('translate(0 -26) scale(1 -1)', clingerBody(1.2)));
+  N.build(out);
   for (let k = 0; k < 4; k++) {
     const ph = k / 4 * TAU;
-    out[`walker_walk${k}`] = walkerFrame(ph, false);
-    out[`jumper_walk${k}`] = jumperFrame(ph, false);
-    out[`clinger_walk${k}`] = clingerFrame(ph);
-    out[`brute_walk${k}`] = bruteFrame(ph, false);
+    out[`walker_walk${k}`] = W.walker(ph, false);
+    out[`jumper_walk${k}`] = W.jumper(ph, false);
+    out[`clinger_walk${k}`] = W.clinger(ph);
+    out[`brute_walk${k}`] = W.brute(ph, false);
   }
-  out.walker_wind = walkerFrame(0, true);
-  out.jumper_wind = jumperFrame(0, true);
-  out.clinger_wind = clingerFrame(0.5);
-  out.brute_wind = bruteFrame(0, true);
+  out.walker_wind = W.walker(0, true);
+  out.jumper_wind = W.jumper(0, true);
+  out.clinger_wind = W.clinger(0.5);
+  out.brute_wind = W.brute(0, true);
 }
 module.exports = { build };
