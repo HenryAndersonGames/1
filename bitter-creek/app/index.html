@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Биттер-Крик</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="vignette"></div>
+<div id="hurt"></div>
+
+<div id="hud" class="hidden">
+  <div id="clock"></div>
+  <div id="money"></div>
+  <div id="p1" class="phud"></div>
+  <div id="p2" class="phud right hidden"></div>
+  <div id="notes"></div>
+  <div id="alerts"></div>
+  <div id="lbl1" class="lbl"></div>
+  <div id="lbl2" class="lbl"></div>
+</div>
+
+<div id="dialog" class="hidden">
+  <div class="dname"></div>
+  <div class="dtext"></div>
+  <div class="dchoices"></div>
+</div>
+
+<div id="book" class="hidden">
+  <div class="btitle">Блокнот агента</div>
+  <div class="tabs"></div>
+  <div class="bcontent"></div>
+  <div class="bhint">◂ ▸ — вкладки · ▴ ▾ — листать · Esc / B — закрыть</div>
+</div>
+
+<div id="screen" class="screen hidden">
+  <div class="sbox">
+    <div class="stitle"></div>
+    <div class="sbody"></div>
+    <div class="slist"></div>
+  </div>
+</div>
+
+<div id="card" class="screen hidden">
+  <div class="cbox">
+    <div class="ctitle"></div>
+    <div class="ctext"></div>
+    <div class="chint"></div>
+  </div>
+</div>
+
+<div id="fade"></div>
+<div id="loading">Биттер-Крик<br><small>загрузка…</small></div>
+<script src="game.js"></script>
+</body>
+</html>

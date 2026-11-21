@@ -1,0 +1,54 @@
+{
+  "name": "bitter-creek",
+  "version": "0.1.0",
+  "description": "Биттер-Крик — нуарный вестерн-детектив на двоих",
+  "main": "electron/main.js",
+  "author": "Bitter Creek Team",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "build:js": "esbuild src/js/main.js --bundle --minify --format=iife --target=chrome80 --outfile=app/game.js",
+    "watch": "esbuild src/js/main.js --bundle --format=iife --target=chrome80 --outfile=app/game.js --watch",
+    "start": "npm run build:js && electron .",
+    "dist": "npm run build:js && electron-builder --win --ia32 --dir && node build/pack-win.mjs"
+  },
+  "devDependencies": {
+    "electron": "22.3.27",
+    "electron-builder": "24.13.3",
+    "esbuild": "0.19.12",
+    "three": "0.162.0",
+    "resedit": "2.0.3",
+    "pe-library": "1.0.1"
+  },
+  "build": {
+    "appId": "com.bittercreek.game",
+    "productName": "BitterCreek",
+    "copyright": "Bitter Creek",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "app/**",
+      "package.json"
+    ],
+    "electronVersion": "22.3.27",
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "ia32"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "electronLanguages": [
+      "ru",
+      "en-US"
+    ]
+  }
+}
