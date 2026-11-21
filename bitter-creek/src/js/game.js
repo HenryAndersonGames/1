@@ -882,9 +882,12 @@ export class Game {
       const n = this.dialogue.npc, p = this.talkPlayer;
       const dx = n.x - p.x, dz = n.z - p.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
       const side = this._dlgSide || (this._dlgSide = Math.random() < 0.5 ? 1 : -1);
-      const cx = p.x - ux * 1.7 - uz * 0.8 * side, cz = p.z - uz * 1.7 + ux * 0.8 * side;
-      cam.position.set(cx, this.world.groundAt(p.x, p.z) + 1.9 * (p.horse ? 1.5 : 1), cz);
-      cam.lookAt(n.x, this.world.groundAt(n.x, n.z) + 1.3 * (n.d.look.h || 1), n.z);
+      // крупный план: камера между агентом и собеседником, чуть сбоку, на уровне глаз
+      const hh = this.world.groundAt(n.x, n.z) + 1.62 * (n.d.look.h || 1);
+      const cd = Math.min(1.45, d * 0.75);
+      const cx = n.x - ux * cd - uz * 0.45 * side, cz = n.z - uz * cd + ux * 0.45 * side;
+      cam.position.set(cx, hh + 0.02, cz);
+      cam.lookAt(n.x, hh - 0.3, n.z);
       if (!p.horse) { p.rot = Math.atan2(dx, dz); p.char.group.rotation.y = p.rot; }
       this.camTarget.set(n.x, 0, n.z);
       return;

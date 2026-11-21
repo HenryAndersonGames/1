@@ -2,6 +2,7 @@
 // Скелет из жёстких частей: тело; плечо → предплечье; бедро → голень. Гладкие формы, реалистичные пропорции.
 import * as THREE from 'three';
 import { GeoBuilder, MAT, SURF, shade, mixColor } from './models.js';
+import { buildPainted } from './paintchar.js';
 
 const DEF = {
   skin: '#c99a78', hair: '#3a2a1e', hairStyle: 'short', beard: 'none',
@@ -258,13 +259,14 @@ const blobGeo = new THREE.CircleGeometry(0.55, 16).rotateX(-PI / 2);
 export class Character {
   constructor(look, opts = {}) {
     this.demon = !!opts.demon;
-    const P = buildParts(look, this.demon);
+    const P = opts.legacy ? buildParts(look, this.demon) : buildPainted(look, this.demon);
+    this.mat = P.material || MAT.solid; this.tex = P.texture || null;
     this.group = new THREE.Group();
     this.root = new THREE.Group();
     this.group.add(this.root);
     const s = (look.h || 1) * (this.demon ? 1.08 : 1);
     this.root.scale.setScalar(s);
-    const mk = (geo, parent, mat = MAT.solid) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; parent.add(m); return m; };
+    const mk = (geo, parent, mat = this.mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; parent.add(m); return m; };
     this.body = mk(P.body, this.root);
     const limb = (geoA, geoB, x, y, joint) => {
       const a = new THREE.Group(); a.position.set(x, y, 0); mk(geoA, a);
@@ -305,7 +307,7 @@ export class Character {
     if (this.poseT > 0) { this.poseT -= dt; if (this.poseT <= 0) this.pose = 'idle'; }
     const r = this.root, p = this.pose;
     if (this.gun) this.gun.visible = (p === 'aim' || p === 'rideAim');
-    this.armL.rotation.z = 0; this.armR.rotation.z = 0; this.legL.rotation.z = 0; this.legR.rotation.z = 0;
+    this.armL.rotation.z = -0.07; this.armR.rotation.z = 0.07; this.legL.rotation.z = 0; this.legR.rotation.z = 0;
     if (p === 'dead' || p === 'downed') {
       this.deadT = Math.min(1, this.deadT + dt * 3);
       const e = 1 - Math.pow(1 - this.deadT, 3);
@@ -353,6 +355,7 @@ export class Character {
   dispose(scene) {
     scene.remove(this.group);
     this.group.traverse(o => { if (o.isMesh && o.geometry !== blobGeo) o.geometry.dispose(); });
+    if (this.tex) { this.tex.dispose(); this.mat.dispose(); }
   }
 }
 

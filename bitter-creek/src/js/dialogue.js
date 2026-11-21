@@ -21,6 +21,7 @@ export class Dialogue {
   }
   openNpc(npc, player) {
     this.npc = npc; npc.talking = true; this.first = true;
+    npc.rot = Math.atan2(player.x - npc.x, player.z - npc.z); npc.show(); npc.char.pose = 'talk'; npc.char.update(0.016, 0); npc.sync();
     this.begin(player, npc.name);
     this.root();
   }
