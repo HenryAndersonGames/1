@@ -14,6 +14,8 @@ export function win(b, g, x, y, z, w, h, o = {}) {
     return;
   }
   g.box(o.glass || '#ffcf86', x, y, z + 0.012, w, h, 0.03);
+  b.box(trim, x, y - h / 2 - 0.14, z + 0.06, w + 0.34, 0.07, 0.14);
+  b.box(trim, x, y + h / 2 + 0.16, z + 0.03, w + 0.36, 0.09, 0.08);
   b.box(trim, x, y, z + 0.035, 0.06, h, 0.03);
   b.box(trim, x, y + h * 0.1, z + 0.035, w, 0.06, 0.03);
   if (o.bars) for (let i = -2; i <= 2; i++) b.box('#222', x + i * w / 5, y, z + 0.06, 0.04, h, 0.04);
@@ -32,9 +34,12 @@ export function sideWin(b, g, x, y, z, len, h, o = {}) {
 }
 
 function door(b, x, y, z, o = {}) {
+  const c = o.color || '#3a2818';
   b.box(o.trim || TRIM, x, y + 1.2, z, 1.7, 2.5, 0.06);
-  b.box(o.color || '#3a2818', x, y + 1.1, z + 0.03, 1.3, 2.2, 0.05);
-  b.box('#c7a24a', x + 0.45, y + 1.1, z + 0.07, 0.08, 0.08, 0.04);
+  b.box(c, x, y + 1.1, z + 0.03, 1.3, 2.2, 0.05);
+  for (const dy of [0.55, 1.6]) for (const dx of [-0.3, 0.3]) b.box(shade(c, 1.18), x + dx, y + dy, z + 0.06, 0.42, dy > 1 ? 0.75 : 0.65, 0.02);
+  b.box(o.trim || TRIM, x, y + 2.5, z + 0.06, 1.9, 0.12, 0.12);
+  b.sph('#c7a24a', x + 0.48, y + 1.1, z + 0.08, 0.04, 0.04, 0.03, 8);
 }
 
 export function porch(b, w, o = {}) {
@@ -46,12 +51,21 @@ export function porch(b, w, o = {}) {
   const n = Math.max(2, Math.round(w / 4.5) + 1);
   for (let i = 0; i < n; i++) {
     const x = -w / 2 + 0.25 + i * (w - 0.5) / (n - 1);
-    b.box(post, x, ph / 2, depth - 0.15, 0.18, ph, 0.18);
-    b.box(post, x, ph - 0.25, depth - 0.45, 0.1, 0.1, 0.6, 0.8, 0, 0);
+    b.box(post, x, ph / 2, depth - 0.15, 0.16, ph, 0.16);
+    b.box(shade(post, 0.85), x, 0.28, depth - 0.15, 0.22, 0.1, 0.22);
+    b.box(shade(post, 0.85), x, ph - 0.1, depth - 0.15, 0.24, 0.1, 0.24);
+    b.box(post, x, ph - 0.3, depth - 0.42, 0.08, 0.08, 0.55, 0.8, 0, 0);
   }
+  // стропила под навесом
+  for (let x = -w / 2 + 0.2; x <= w / 2; x += 0.75) b.box(shade(roof, 0.8), x, ph - 0.03, depth / 2 + 0.1, 0.07, 0.09, depth + 0.3, 0.09, 0, 0);
+  b.box(shade(roof, 0.75), 0, ph - 0.2, depth - 0.15, w, 0.14, 0.1);
   if (o.rail !== false) {
-    b.box(post, -w / 2 + 1.5, 0.75, depth - 0.15, 2.6, 0.08, 0.08);
-    b.box(post, w / 2 - 1.5, 0.75, depth - 0.15, 2.6, 0.08, 0.08);
+    for (const s of [-1, 1]) {
+      const cx = s * (w / 2 - 1.5);
+      b.box(post, cx, 0.8, depth - 0.15, 2.6, 0.07, 0.09);
+      b.box(post, cx, 0.3, depth - 0.15, 2.6, 0.05, 0.07);
+      for (let x = cx - 1.2; x <= cx + 1.2; x += 0.2) b.box(shade(post, 1.1), x, 0.55, depth - 0.15, 0.035, 0.48, 0.035);
+    }
   }
   if (o.hitch !== false) {
     b.box(post, -1.6, 0.5, depth + 1.1, 0.14, 1.0, 0.14);
@@ -73,8 +87,14 @@ export function falseFront(b, g, o) {
     b.box(trim, 0, ff + 1.0, 0.08, w * 0.42 + 0.35, 0.16, 0.42);
   }
   for (let y = 0.9; y < ff - 0.3; y += 0.85) b.box(shade(wall2, 0.82), 0, y, 0.235, w + 0.3, 0.05, 0.02);
-  b.box(trim, -w / 2 - 0.1, ff / 2, 0.24, 0.16, ff, 0.05);
-  b.box(trim, w / 2 + 0.1, ff / 2, 0.24, 0.16, ff, 0.05);
+  b.box(trim, -w / 2 - 0.1, ff / 2, 0.24, 0.2, ff, 0.08);
+  b.box(trim, w / 2 + 0.1, ff / 2, 0.24, 0.2, ff, 0.08);
+  for (let x = -w / 2; x <= w / 2 + 0.01; x += w / Math.max(4, Math.round(w / 1.4))) {
+    b.box(trim, x, ff - 0.08, 0.3, 0.1, 0.2, 0.18);
+    b.box(trim, x, ff - 0.22, 0.27, 0.07, 0.12, 0.1);
+  }
+  b.box(trim, 0, ff - 0.35, 0.25, w + 0.3, 0.06, 0.06);
+  for (let x = -w / 2 + 0.5; x < w / 2; x += 1.1) b.box(shade(o.roof || ROOF, 0.8), x, h + 0.06, -d - 0.15, 0.08, 0.1, 0.4);
   // боковые окна
   for (const s of [-1, 1]) sideWin(b, g, s * (w / 2 + 0.02), 1.6, -d * 0.45, 1.2, 1.1, { dark: o.dark });
   if (o.swing) {
@@ -130,9 +150,22 @@ export function house(b, g, o) {
   b.prism(shade(wall, 0.92), 0, h, -d / 2, w, rh, d);
   for (let y = 0.6; y < h; y += 0.6) b.box(shade(wall, 0.85), 0, y, 0.005, w + 0.02, 0.04, 0.02);
   const a = Math.atan2(rh, w / 2), L = Math.hypot(w / 2, rh) + 0.6;
-  b.box(roof, -w / 4 - 0.05, h + rh / 2 + 0.06, -d / 2, L, 0.16, d + 0.8, 0, 0, a);
-  b.box(roof, w / 4 + 0.05, h + rh / 2 + 0.06, -d / 2, L, 0.16, d + 0.8, 0, 0, -a);
-  b.box(shade(roof, 0.7), 0, h + rh + 0.05, -d / 2, 0.3, 0.2, d + 0.8);
+  // кровля рядами дранки
+  const rows = 7;
+  for (const s of [-1, 1]) {
+    b.box(shade(roof, 0.7), s * (w / 4 + 0.05), h + rh / 2 + 0.02, -d / 2, L, 0.08, d + 0.8, 0, 0, -s * a);
+    for (let k = 0; k < rows; k++) {
+      const t = (k + 0.5) / rows, ex = s * (w / 2 + 0.3);
+      const cx = ex * (1 - t), cy = h - 0.08 + (rh + 0.08) * t + 0.1;
+      b.box(shade(roof, 0.88 + (k % 2) * 0.16), cx, cy, -d / 2, L / rows * 1.2, 0.07, d + 0.8, 0, 0, -s * (a + 0.05));
+    }
+    // торцевая доска и выступающие балки
+    b.box(shade(wall, 0.7), s * (w / 4), h + rh / 2, 0.42, L - 0.3, 0.12, 0.06, 0, 0, -s * a);
+  }
+  b.box(shade(roof, 0.6), 0, h + rh + 0.08, -d / 2, 0.32, 0.2, d + 0.85);
+  // угловые доски
+  for (const s of [-1, 1]) { b.box(shade(wall, 0.75), s * (w / 2 + 0.03), h / 2, 0.03, 0.14, h, 0.14); b.box(shade(wall, 0.75), s * (w / 2 + 0.03), h / 2, -d - 0.03, 0.14, h, 0.14); }
+  b.box(shade(wall, 0.7), 0, 0.15, 0.03, w + 0.1, 0.3, 0.08);
   if (o.chimney !== false) b.box('#6b4a3c', w * 0.25, h + rh * 0.7, -d * 0.7, 0.7, rh + 0.8, 0.7);
   door(b, o.doorX || 0, 0, 0.03, { color: o.doorC });
   const wx = w * 0.3;

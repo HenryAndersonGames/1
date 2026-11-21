@@ -1,9 +1,10 @@
 // Игра: цикл, время суток, ночи и похищения, бой, последствия, сохранения, финал.
 import * as THREE from 'three';
-import { initMaterials, MAT } from './models.js';
+import { initMaterials, MAT, makeSky } from './models.js';
 import { World } from './world.js';
 import { Player, NPC, Demon, Boss, planPath, PIT_TRAIL } from './entities.js';
 import { FX } from './fx.js';
+import { Horse } from './horse.js';
 import { Input } from './input.js';
 import { Sfx } from './audio.js';
 import { UI } from './ui.js';
@@ -35,19 +36,23 @@ export class Game {
     this.canvas = document.getElementById('c');
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: q === 'high', powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(q === 'low' ? 0.7 : q === 'medium' ? Math.min(1, devicePixelRatio) : Math.min(1.5, devicePixelRatio));
-    this.renderer.shadowMap.enabled = q === 'high';
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.enabled = q !== 'low';
+    this.renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.12;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#c9a57e');
     this.scene.fog = new THREE.Fog('#c9a57e', 60, 240);
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 320);
-    initMaterials();
+    initMaterials(q);
+    this.sky = makeSky(); this.scene.add(this.sky);
     this.hemi = new THREE.HemisphereLight('#efe0c8', '#6a5040', 1.5); this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight('#ffe4bc', 2.5); this.scene.add(this.sun); this.scene.add(this.sun.target);
-    if (q === 'high') {
-      this.sun.castShadow = true; this.sun.shadow.mapSize.set(1024, 1024);
-      const s = this.sun.shadow.camera; s.left = -45; s.right = 45; s.top = 45; s.bottom = -45; s.near = 1; s.far = 220;
-      this.sun.shadow.bias = -0.0008;
+    if (q !== 'low') {
+      const S = q === 'high' ? 2048 : 1024, R = q === 'high' ? 50 : 34;
+      this.sun.castShadow = true; this.sun.shadow.mapSize.set(S, S);
+      const s = this.sun.shadow.camera; s.left = -R; s.right = R; s.top = R; s.bottom = -R; s.near = 1; s.far = 220;
+      this.sun.shadow.bias = -0.0006; this.sun.shadow.normalBias = 0.04;
     }
     this.world = new World(this.scene, q);
     this.fx = new FX(this);
@@ -76,6 +81,14 @@ export class Game {
 
   applySettings(first) {
     const s = this.settings;
+    const gr = document.getElementById('grain');
+    if (gr && !gr.style.backgroundImage) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 160;
+      const cx = cv.getContext('2d'), im = cx.createImageData(160, 160);
+      for (let i = 0; i < im.data.length; i += 4) { const v = Math.random() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+      cx.putImageData(im, 0, 0); gr.style.backgroundImage = `url(${cv.toDataURL()})`;
+    }
+    document.body.classList.toggle('nograin', !s.grade || s.quality === 'low');
     this.audio.setVolume(s.volume);
     this.canvas.classList.toggle('grade', !!s.grade && s.quality !== 'low');
     if (window.native) window.native.fullscreen(!!s.fullscreen);
@@ -139,6 +152,8 @@ export class Game {
     for (const p of this.players) p.dispose();
     for (const n of this.npcs) n.dispose();
     for (const d of this.demons) d.dispose();
+    for (const h of this.horses || []) h.dispose();
+    this.horses = [];
     if (this.boss) this.scene.remove(this.boss.group);
     this.players = []; this.npcs = []; this.demons = []; this.boss = null; this.eclipse = false;
     this.fx.clearAll();
@@ -157,10 +172,42 @@ export class Game {
     this.schedule = [];
     for (let i = 0; i < numPlayers; i++) this.players.push(new Player(this, i));
     for (const d of NPCS) this.npcs.push(new NPC(this, d));
+    this.spawnHorses();
     this.players[0].x = 97; this.players[0].z = 3; this.players[0].rot = -Math.PI / 2;
     if (this.players[1]) { this.players[1].x = 97; this.players[1].z = -1.5; this.players[1].rot = -Math.PI / 2; }
     this.camYaw = Math.PI / 2 - 0.3;
     this.hud(true);
+  }
+  spawnHorses() {
+    const W = this.world, list = [];
+    const at = (id, lx, lz, coat) => { const a = W.anchors[id], p = W.toWorld(id, lx, lz); list.push(new Horse(this, coat, p.x, p.z, a.ry + Math.PI)); };
+    list.push(new Horse(this, 0, 98.8, 4.7, -Math.PI / 2));
+    list.push(new Horse(this, 4, 98.6, -3.3, -Math.PI / 2));
+    at('saloon', -4.4, 5.0, 2); at('saloon', -6.2, 5.0, 1);
+    at('sheriff', 4.2, 5.0, 3); at('hotel', 4.4, 5.0, 5);
+    at('stable', -3, 3.5, 1); at('stable', 3, 3.5, 3);
+    at('farm', 3, 6, 0);
+    this.horses = list;
+  }
+  callHorse(p) {
+    if (p.horse) return;
+    let h = this.horses.find((q) => q.owner === p.idx && !q.rider);
+    if (!h) { let bd = 1e9; for (const q of this.horses) { if (q.rider) continue; const d = dist(q.x, q.z, p.x, p.z); if (d < bd) { bd = d; h = q; } } }
+    this.audio.whistle();
+    if (!h || dist(h.x, h.z, p.x, p.z) > 320) { this.notifyOnce('Свист уносит ветер. Лошади слишком далеко.'); return; }
+    h.called = p; h.owner = p.idx;
+    setTimeout(() => this.audio.neigh(this.camDist(h.x, h.z)), 500);
+    this.notifyOnce(`${p.name} свистит. Лошадь бежит на зов.`);
+  }
+  pushFromHorses(p) {
+    for (const h of this.horses) {
+      if (h === p.horse) continue;
+      for (const k of [-0.75, 0, 0.75]) {
+        const cx = h.x + Math.sin(h.rot) * k, cz = h.z + Math.cos(h.rot) * k;
+        const dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz), R = 0.55 + p.radius;
+        if (d < R && d > 1e-4) { p.x = cx + dx / d * R; p.z = cz + dz / d * R; }
+      }
+    }
   }
   hud(on) { this.ui.hudEl.classList.toggle('hidden', !on); this.ui.hideScreen(); this.ui.screen.classList.remove('main'); }
   newGame(n) {
@@ -174,12 +221,14 @@ export class Game {
       this.notify(`Подойдите к жителю и нажмите [${this.input.glyph(0, 'interact')}], чтобы поговорить.`);
       setTimeout(() => this.notify(`[${this.input.glyph(0, 'book')}] — блокнот: улики, жители, карта и цели.`), 2500);
       setTimeout(() => this.notify('Начните с шерифа: его контора — на главной улице, к западу.'), 5000);
+      setTimeout(() => this.notify(`У въезда ждут две лошади: подойдите и нажмите [${this.input.glyph(0, 'interact')}]. Свистнуть лошадь — [${this.input.glyph(0, 'call')}].`), 7500);
     }, 'intro');
   }
   saveGame(manual) {
     if (!this.state) return;
     const data = {
       state: this.state, camYaw: this.camYaw,
+      horses: this.horses.map((h) => ({ x: h.x, z: h.z, rot: h.rot, owner: h.owner })),
       players: this.players.map((p) => ({ x: p.x, z: p.z, hp: p.downed ? 40 : p.hp, ammo: p.ammo, silver: p.silver, clip: p.clip, clipType: p.clipType, prefer: p.prefer })),
       npcs: Object.fromEntries(this.npcs.map((n) => [n.id, {
         alive: n.alive, hollow: n.hollow, revealed: n.revealed, missing: n.missing, returned: n.returned, hp: n.hp, st: n.state,
@@ -205,6 +254,7 @@ export class Game {
       else if (n.workTime()) { n.state = 'atWork'; }
       else { n.state = 'home'; n.hide(); }
     }
+    (s.horses || []).forEach((d, i) => { const h = this.horses[i]; if (h) { h.x = d.x; h.z = d.z; h.rot = d.rot; h.owner = d.owner; h.sync(); } });
     this.schedule = [];
     this.mode = 'play';
     this.notify(`День ${this.dayNum()}. Игра загружена.`);
@@ -623,6 +673,12 @@ export class Game {
   scanInteract(p) {
     let best = null, bd = 1e9;
     const consider = (d, item) => { if (d < bd) { bd = d; best = item; } };
+    if (p.horse) return { kind: 'dismount', x: p.x, z: p.z, label: 'лошадь', verb: 'Спешиться', y: this.world.groundAt(p.x, p.z) };
+    for (const h of this.horses) {
+      if (h.rider) continue;
+      const d = dist(p.x, p.z, h.x, h.z);
+      if (d < 2.6) consider(d + 0.3, { kind: 'mount', h, x: h.x, z: h.z, label: `Лошадь (${h.C.name})`, verb: 'Сесть верхом' });
+    }
     const o = this.otherPlayer(p);
     if (o && o.downed) { const d = dist(p.x, p.z, o.x, o.z); if (d < 2.4) consider(d - 1, { kind: 'revive', x: o.x, z: o.z, label: o.name, verb: 'Поднять (держать)' }); }
     for (const n of this.npcs) {
@@ -650,6 +706,8 @@ export class Game {
       case 'body': this.dialogue.openBody(it.n, p); break;
       case 'spot': this.dialogue.openSpot(it.s, p); break;
       case 'cache': this.dialogue.openCache(it.id, p); break;
+      case 'mount': p.mount(it.h); break;
+      case 'dismount': p.dismount(); break;
     }
   }
 
@@ -668,6 +726,8 @@ export class Game {
     else { this.ui.update(dt, nav); this.updateVisualOnly(dt); }
     if (this.mode === 'card' || this.mode === 'book' || this.mode === 'pause') { /* уже обработано */ }
     if (this.state && this.mode !== 'menu') this.ui.hud(dt);
+    const cine = this.mode === 'dialog' || this.mode === 'card';
+    if (cine !== this._cine) { this._cine = cine; document.body.classList.toggle('cine', cine); }
     this.updateLighting(dt);
     this.updateCamera(dt);
     this.audio.update(dt, !!this.state);
@@ -703,6 +763,8 @@ export class Game {
       if (c.camL) this.camYaw += dt * 1.6;
       if (c.camR) this.camYaw -= dt * 1.6;
       p.update(dt, c);
+      if (c.call && !p.downed) this.callHorse(p);
+      if (!p.horse && !p.downed) this.pushFromHorses(p);
       p.focus = null; p.prompt = '';
       if (p.downed) return;
       const it = this.scanInteract(p);
@@ -716,6 +778,7 @@ export class Game {
       }
     });
     if (this.mode !== 'play') return;
+    for (const h of this.horses) h.update(dt);
     for (const n of this.npcs) n.update(dt);
     for (const d of this.demons) d.update(dt);
     this.demons = this.demons.filter((d) => !d.dead);
@@ -764,6 +827,14 @@ export class Game {
     }
     const qf = this.settings.quality === 'low' ? 0.75 : 1;
     this.scene.background.copy(L.sky);
+    if (this.sky) {
+      const u = this.sky.material.uniforms;
+      u.horizon.value.copy(L.sky);
+      u.top.value.copy(L.sky).multiplyScalar(L.night > 0.5 ? 0.45 : 0.62).lerp(_c2.set(L.night > 0.5 ? '#05070d' : '#5d7390'), L.night > 0.5 ? 0.6 : 0.45);
+      u.sunCol.value.copy(L.sun);
+      u.sunAmt.value = (1 - L.night) * (this.eclT > 0 ? 0.2 : 1);
+      this.sky.position.copy(this.camera.position);
+    }
     this.scene.fog.color.copy(L.sky); this.scene.fog.near = L.fn; this.scene.fog.far = L.ff * qf;
     this.camera.far = L.ff * qf + 25; this.camera.updateProjectionMatrix();
     this.hemi.color.copy(L.hs); this.hemi.groundColor.copy(L.hg); this.hemi.intensity = L.hi;
@@ -774,6 +845,7 @@ export class Game {
     const ct = this.camTarget;
     this.sun.position.set(ct.x + Math.cos(az) * Math.cos(el) * 100, ct.y + Math.sin(el) * 100, ct.z + Math.sin(az) * Math.cos(el) * 100);
     this.sun.target.position.copy(ct);
+    if (this.sky) this.sky.material.uniforms.sunDir.value.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el));
     this.nightness = L.night;
     for (const p of this.players) p.light.intensity = L.night * (p.downed ? 6 : 18);
     this.audio.setNight(L.night, this.demons.some((d) => d.alive && d.state === 'hunt') ? 1 : 0);
@@ -788,6 +860,19 @@ export class Game {
       this.camTarget.set(0, 0, 0);
       return;
     }
+    // разговор: крупный план из-за плеча агента
+    if (this.mode === 'dialog' && this.dialogue.npc && this.talkPlayer) {
+      const n = this.dialogue.npc, p = this.talkPlayer;
+      const dx = n.x - p.x, dz = n.z - p.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
+      const side = this._dlgSide || (this._dlgSide = Math.random() < 0.5 ? 1 : -1);
+      const cx = p.x - ux * 1.7 - uz * 0.8 * side, cz = p.z - uz * 1.7 + ux * 0.8 * side;
+      cam.position.set(cx, this.world.groundAt(p.x, p.z) + 1.9 * (p.horse ? 1.5 : 1), cz);
+      cam.lookAt(n.x, this.world.groundAt(n.x, n.z) + 1.3 * (n.d.look.h || 1), n.z);
+      if (!p.horse) { p.rot = Math.atan2(dx, dz); p.char.group.rotation.y = p.rot; }
+      this.camTarget.set(n.x, 0, n.z);
+      return;
+    }
+    this._dlgSide = 0;
     const ps = this.players;
     let mx = 0, mz = 0;
     for (const p of ps) { mx += p.x; mz += p.z; }
@@ -803,15 +888,21 @@ export class Game {
     const k = 1 - Math.exp(-dt * 6);
     target.x += (mx - target.x) * k; target.z += (mz - target.z) * k; target.y += (my - target.y) * k;
     this.camTarget.copy(target);
-    const want = clamp(9.5 + sep * 0.95, 9.5, 46);
+    const riding = this.players.some((p) => p.horse);
+    const base = riding ? 11 : 7.8;
+    const want = clamp(base + sep * 0.95, base, 46);
     this.camDistNow = this.camDistNow ? lerp(this.camDistNow, want, 1 - Math.exp(-dt * 2.5)) : want;
     const D = this.camDistNow;
-    let pitch = lerp(0.42, 0.95, clamp((D - 9.5) / 36, 0, 1));
+    let pitch = lerp(0.36, 0.95, clamp((D - 7.8) / 38, 0, 1));
     const yaw = this.camYaw;
     // если между камерой и героями дом — камера поднимается и смотрит сверху
     const H = Math.cos(pitch) * D, sx = Math.sin(yaw), sz = Math.cos(yaw);
     let free = H;
-    for (let s = 1.2; s < H + 1; s += 0.6) if (this.world.blockedAt(target.x + sx * s, target.z + sz * s, true)) { free = Math.max(0.5, s - 1.2); break; }
+    const tp = Math.tan(pitch);
+    for (let s = 1.2; s < H + 1; s += 0.6) {
+      if (1.5 + s * tp > 9.5) break; // луч уже выше крыш
+      if (this.world.blockedAt(target.x + sx * s, target.z + sz * s, true)) { free = Math.max(0.5, s - 1.2); break; }
+    }
     const want2 = free < H ? Math.max(pitch, Math.acos(clamp(free / D, 0, 1))) : pitch;
     this.pitchNow = this.pitchNow === undefined ? want2 : lerp(this.pitchNow, want2, 1 - Math.exp(-dt * (want2 > this.pitchNow ? 8 : 2)));
     pitch = Math.min(1.35, this.pitchNow);

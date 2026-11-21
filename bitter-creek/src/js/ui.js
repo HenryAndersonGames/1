@@ -121,6 +121,8 @@ export class UI {
       <tr><td>Говорить, осмотреть, поднять</td><td>A</td><td>E</td><td>Enter</td></tr>
       <tr><td>Перезарядка</td><td>B</td><td>R</td><td>. (точка) / Num2</td></tr>
       <tr><td>Свинец / серебро</td><td>Y</td><td>Q</td><td>, (запятая) / Num3</td></tr>
+      <tr><td>Сесть на лошадь / спешиться</td><td>A</td><td>E</td><td>Enter</td></tr>
+      <tr><td>Свистнуть лошадь</td><td>R3 (нажать правый стик)</td><td>H</td><td>' (апостроф)</td></tr>
       <tr><td>Повернуть камеру</td><td>LB / RB</td><td>Z / C</td><td>[ / ]</td></tr>
       <tr><td>Блокнот</td><td>Back</td><td>Tab</td><td>\\</td></tr>
       <tr><td>Пауза</td><td>Start</td><td>Esc</td><td>Backspace</td></tr></table>

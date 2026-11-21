@@ -5,12 +5,12 @@ const KB = {
   wasd: {
     up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], run: ['ShiftLeft'],
     shoot: ['Space'], punch: ['KeyF'], interact: ['KeyE'], reload: ['KeyR'], swap: ['KeyQ'],
-    camL: ['KeyZ'], camR: ['KeyC'], book: ['Tab', 'KeyJ'], pause: ['Escape'],
+    camL: ['KeyZ'], camR: ['KeyC'], book: ['Tab', 'KeyJ'], pause: ['Escape'], call: ['KeyH'],
   },
   arrows: {
     up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], run: ['ShiftRight'],
     shoot: ['ControlRight', 'Numpad0'], punch: ['Slash', 'Numpad1'], interact: ['Enter', 'NumpadEnter'], reload: ['Period', 'Numpad2'], swap: ['Comma', 'Numpad3'],
-    camL: ['BracketLeft'], camR: ['BracketRight'], book: ['Backslash', 'NumpadAdd'], pause: ['Backspace'],
+    camL: ['BracketLeft'], camR: ['BracketRight'], book: ['Backslash', 'NumpadAdd'], pause: ['Backspace'], call: ['Quote', 'Numpad4'],
   },
 };
 // Кнопки стандартного геймпада
@@ -71,7 +71,7 @@ export class Input {
 
   ctrl(i) {
     const a = this.assignment(i);
-    const c = { mx: 0, my: 0, ax: 0, ay: 0, aimStick: false, run: false, shoot: false, shootHeld: false, punch: false, interact: false, interactHeld: false, reload: false, swap: false, camL: false, camR: false, book: false, pause: false, mouseAim: false, pad: false };
+    const c = { mx: 0, my: 0, ax: 0, ay: 0, aimStick: false, run: false, shoot: false, shootHeld: false, punch: false, interact: false, interactHeld: false, reload: false, swap: false, call: false, camL: false, camR: false, book: false, pause: false, mouseAim: false, pad: false };
     for (const set of a.kb) {
       const K = KB[set];
       if (this.key(K.up)) c.my += 1; if (this.key(K.down)) c.my -= 1;
@@ -80,7 +80,7 @@ export class Input {
       c.shoot = c.shoot || this.hit(K.shoot); c.shootHeld = c.shootHeld || this.key(K.shoot);
       c.punch = c.punch || this.hit(K.punch);
       c.interact = c.interact || this.hit(K.interact); c.interactHeld = c.interactHeld || this.key(K.interact);
-      c.reload = c.reload || this.hit(K.reload); c.swap = c.swap || this.hit(K.swap);
+      c.reload = c.reload || this.hit(K.reload); c.swap = c.swap || this.hit(K.swap); c.call = c.call || this.hit(K.call);
       c.camL = c.camL || this.key(K.camL); c.camR = c.camR || this.key(K.camR);
       c.book = c.book || this.hit(K.book); c.pause = c.pause || this.hit(K.pause);
       if (this.hit(Object.values(K).flat())) this.lastDevice[i] = 'kb';
@@ -101,7 +101,7 @@ export class Input {
       c.shoot = c.shoot || P.just[PB.RT]; c.shootHeld = c.shootHeld || P.now[PB.RT];
       c.punch = c.punch || P.just[PB.X];
       c.interact = c.interact || P.just[PB.A]; c.interactHeld = c.interactHeld || P.now[PB.A];
-      c.reload = c.reload || P.just[PB.B]; c.swap = c.swap || P.just[PB.Y];
+      c.reload = c.reload || P.just[PB.B]; c.swap = c.swap || P.just[PB.Y]; c.call = c.call || P.just[PB.RS];
       c.camL = c.camL || P.now[PB.LB]; c.camR = c.camR || P.now[PB.RB];
       c.book = c.book || P.just[PB.BACK]; c.pause = c.pause || P.just[PB.START];
       if (P.just.some((v) => v) || lx || ly) { this.lastDevice[i] = 'pad'; c.pad = true; }
@@ -141,10 +141,10 @@ export class Input {
   glyph(i, action) {
     const pad = this.lastDevice[i] === 'pad';
     const map = pad
-      ? { interact: 'A', shoot: 'RT', punch: 'X', reload: 'B', swap: 'Y', book: 'Back', run: 'LT' }
+      ? { interact: 'A', shoot: 'RT', punch: 'X', reload: 'B', swap: 'Y', book: 'Back', run: 'LT', call: 'R3' }
       : (this.numPlayers === 2 && i === 1
-        ? { interact: 'Enter', shoot: 'Пр.Ctrl', punch: '/', reload: '.', swap: ',', book: '\\', run: 'Пр.Shift' }
-        : { interact: 'E', shoot: 'ЛКМ/Пробел', punch: 'ПКМ/F', reload: 'R', swap: 'Q', book: 'Tab', run: 'Shift' });
+        ? { interact: 'Enter', shoot: 'Пр.Ctrl', punch: '/', reload: '.', swap: ',', book: '\\', run: 'Пр.Shift', call: "'" }
+        : { interact: 'E', shoot: 'ЛКМ/Пробел', punch: 'ПКМ/F', reload: 'R', swap: 'Q', book: 'Tab', run: 'Shift', call: 'H' });
     return map[action] || action;
   }
 }

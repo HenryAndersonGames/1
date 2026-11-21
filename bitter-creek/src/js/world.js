@@ -1,6 +1,6 @@
 // Мир: рельеф, город (~30 построек), окрестности, растительность, столкновения.
 import * as THREE from 'three';
-import { GeoBuilder, MAT, makeSign, shade } from './models.js';
+import { GeoBuilder, MAT, SURF, makeSign, shade } from './models.js';
 import * as BLD from './buildings.js';
 import { heightAt, groundColor, forestMask, roadDist, creekZ, LOC, MAP_HALF, PLAY_HALF, WATER_Y } from './terrain.js';
 import { mulberry32, clamp, smoothstep } from './util.js';
@@ -171,31 +171,23 @@ export class World {
 
   // ---------- рельеф ----------
   buildTerrain() {
-    const seg = this.quality === 'low' ? 120 : 160;
+    const seg = this.quality === 'low' ? 130 : this.quality === 'high' ? 260 : 200;
     const geo = new THREE.PlaneGeometry(MAP_HALF * 2, MAP_HALF * 2, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
-    const g = geo.toNonIndexed();
-    const p = g.attributes.position;
-    const col = new Float32Array(p.count * 3);
-    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+    geo.computeVertexNormals();
+    const nrm = geo.attributes.normal;
+    const col = new Float32Array(pos.count * 3), det = new Float32Array(pos.count).fill(2);
     const r = mulberry32(42);
-    for (let i = 0; i < p.count; i += 3) {
-      a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);
-      n.subVectors(c, b).cross(a.clone().sub(b)).normalize();
-      const cx = (a.x + b.x + c.x) / 3, cz = (a.z + b.z + c.z) / 3, cy = (a.y + b.y + c.y) / 3;
-      const rgb = groundColor(cx, cz, cy, Math.abs(n.y), r());
-      for (let k = 0; k < 3; k++) {
-        col[(i + k) * 3] = Math.pow(rgb[0], 2.2);
-        col[(i + k) * 3 + 1] = Math.pow(rgb[1], 2.2);
-        col[(i + k) * 3 + 2] = Math.pow(rgb[2], 2.2);
-      }
+    for (let i = 0; i < pos.count; i++) {
+      const rgb = groundColor(pos.getX(i), pos.getZ(i), pos.getY(i), Math.abs(nrm.getY(i)), r());
+      col[i * 3] = Math.pow(rgb[0], 2.2); col[i * 3 + 1] = Math.pow(rgb[1], 2.2); col[i * 3 + 2] = Math.pow(rgb[2], 2.2);
     }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g.deleteAttribute('uv');
-    g.computeVertexNormals();
-    const m = new THREE.Mesh(g, MAT.solid);
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('aDet', new THREE.BufferAttribute(det, 1));
+    geo.deleteAttribute('uv');
+    const m = new THREE.Mesh(geo, MAT.solid);
     m.receiveShadow = true; m.matrixAutoUpdate = false;
     this.scene.add(m);
     this.terrain = m;
@@ -302,7 +294,7 @@ export class World {
       const o = { ...B };
       switch (B.type) {
         case 'ff': info = BLD.falseFront(b, g, o); break;
-        case 'bank': info = BLD.bank(b, g, o); break;
+        case 'bank': b.surface = SURF.FINE; info = BLD.bank(b, g, o); b.surface = SURF.WOOD; break;
         case 'house': info = BLD.house(b, g, o);
           if (B.bell) { b.box('#5a4433', 0, B.h + B.w * 0.38 + 0.6, -1.5, 1.2, 1.4, 1.2); b.cone('#3f322a', 0, B.h + B.w * 0.38 + 1.8, -1.5, 1.0, 1.0, 4, 0, Math.PI / 4, 0); b.cyl('#9a8a5a', 0, B.h + B.w * 0.38 + 0.6, -1.5, 0.2, 0.35, 0.5, 6); }
           break;
@@ -447,6 +439,7 @@ export class World {
     const adobe = '#b08060';
     const walls = [[-10, -16, -10, -2, 3.2], [10, -16, 10, -6, 2.0], [10, -3, 10, 0, 1.0], [-10, -16, 3, -16, 2.6], [6, -16, 10, -16, 1.4], [-10, 0, -3, 0, 4.2], [3, 0, 10, 0, 3.6]];
     this.place(Mi.x, Mi.z, Math.PI, undefined, (b) => {
+      b.surface = SURF.FINE;
       for (const [x0, z0, x1, z1, h] of walls) {
         const len = Math.hypot(x1 - x0, z1 - z0), steps = Math.ceil(len / 2);
         for (let i = 0; i < steps; i++) {
@@ -466,6 +459,7 @@ export class World {
       for (let i = 0; i < 10; i++) b.rock(adobe, (r() - 0.5) * 18, 0.3, -2 - r() * 13, 0.4 + r() * 0.6);
       b.box('#5a4430', -6, 0.15, -8, 2.5, 0.3, 0.6, 0, 0.4, 0); b.box('#5a4430', -4, 0.15, -10, 2.2, 0.3, 0.6, 0, -0.3, 0);
       b.box('#4a3828', 5, 1.1, -12, 0.15, 2.2, 0.15, 0.3, 0, 0.2); b.box('#4a3828', 5, 1.6, -12, 0.9, 0.12, 0.12, 0.3, 0, 0.2);
+      b.surface = SURF.WOOD;
     });
     for (const [x0, z0, x1, z1] of walls) {
       const a = this.toWorld('mission', x0, z0), c = this.toWorld('mission', x1, z1);
@@ -558,11 +552,11 @@ export class World {
     const r = mulberry32(777);
     const types = {
       pine: this.vegGeo('pine'), dead: this.vegGeo('dead'), cactus: this.vegGeo('cactus'),
-      rock: this.vegGeo('rock'), bush: this.vegGeo('bush'), cotton: this.vegGeo('cotton'),
+      rock: this.vegGeo('rock'), bush: this.vegGeo('bush'), cotton: this.vegGeo('cotton'), grass: this.vegGeo('grass'),
     };
     const inst = {};
     const add = (type, x, z, s, ry) => {
-      const key = type + ':' + Math.floor(x / 200) + ',' + Math.floor(z / 200);
+      const R = type === 'grass' ? 90 : 200, key = type + ':' + Math.floor(x / R) + ',' + Math.floor(z / R);
       (inst[key] || (inst[key] = { type, list: [] })).list.push([x, z, s, ry]);
     };
     const clearOf = (x, z, pad) => {
@@ -606,6 +600,21 @@ export class World {
     scatter('rock', Math.round(380 * N), (x, z, h) => forestMask(x, z) < 0.5 && (h > 6 || r() < 0.35));
     scatter('bush', Math.round(420 * N), (x, z, h) => forestMask(x, z) < 0.4 && h < 25);
     scatter('dead', Math.round(50 * N), (x, z, h) => forestMask(x, z) < 0.3 && h < 20);
+    // сухая трава — в том числе на окраинах города
+    if (this.quality !== 'low') {
+      const G = this.quality === 'high' ? 3200 : 1800;
+      let placed = 0;
+      for (let i = 0; i < G * 6 && placed < G; i++) {
+        const x = (r() - 0.5) * 2 * PLAY_HALF * (i % 3 ? 0.55 : 1), z = (r() - 0.5) * 2 * PLAY_HALF * (i % 3 ? 0.55 : 1);
+        if (roadDist(x, z).d < 0.5 || Math.abs(z - creekZ(x)) < 4) continue;
+        const td = Math.hypot(x / 1.3, z);
+        if (td < 75 && Math.abs(z) < 30) continue;
+        if (this.blockedAt(x, z)) continue;
+        if (heightAt(x, z) > 25 || forestMask(x, z) > 0.6) continue;
+        add('grass', x, z, 0.8 + r() * 0.7, r() * 6);
+        placed++;
+      }
+    }
     // приметное дерево у тайника и на кладбище
     add('dead', 300, -62, 1.4, 0.3);
     add('dead', LOC.cemetery.x - 12, LOC.cemetery.z + 8, 1.2, 1.1);
@@ -616,6 +625,7 @@ export class World {
       const { type, list } = inst[key];
       const im = new THREE.InstancedMesh(types[type], MAT.solid, list.length);
       im.castShadow = type === 'pine' || type === 'dead' || type === 'cactus' || type === 'cotton';
+      if (type === 'grass') im.frustumCulled = true;
       im.receiveShadow = type === 'rock';
       list.forEach(([x, z, s, ry], i) => {
         q.setFromAxisAngle(v.set(0, 1, 0), ry);
@@ -639,42 +649,57 @@ export class World {
   }
 
   vegGeo(type) {
-    const b = new GeoBuilder();
+    const b = new GeoBuilder(SURF.FINE);
     switch (type) {
       case 'pine':
-        b.cyl('#4a3526', 0, 1.0, 0, 0.18, 0.3, 2.0, 6);
-        b.cone('#2c3a28', 0, 2.9, 0, 2.2, 3.0, 7);
-        b.cone('#31432d', 0, 4.5, 0, 1.7, 2.6, 7);
-        b.cone('#384c33', 0, 5.9, 0, 1.15, 2.2, 7);
+        b.cyl('#4a3526', 0, 1.6, 0, 0.12, 0.3, 3.2, 9);
+        for (let i = 0; i < 6; i++) {
+          const y = 2.0 + i * 0.95, r = 2.3 - i * 0.33;
+          b.cone(i % 2 ? '#2e3e2a' : '#344832', Math.sin(i * 2.4) * 0.08, y + 0.6, Math.cos(i * 2.4) * 0.08, r, 1.9, 11, 0, i * 0.7, 0);
+        }
+        b.cone('#3c5236', 0, 8.1, 0, 0.5, 1.4, 9);
         break;
       case 'cotton':
-        b.cyl('#4a3c2e', 0, 1.6, 0, 0.25, 0.4, 3.2, 6);
-        b.ico('#56623a', 0, 4.2, 0, 2.2, 1.6, 2.2, 0);
-        b.ico('#606c40', 1.2, 4.9, 0.6, 1.4, 1.1, 1.4, 0);
-        b.ico('#4c5834', -1.0, 4.6, -0.8, 1.5, 1.2, 1.5, 0);
+        b.cyl('#4a3c2e', 0, 1.5, 0, 0.22, 0.42, 3.0, 10);
+        b.limb('#4a3c2e', 0, 2.6, 0, 1.2, 4.0, 0.3, 0.18, 0.08, 7);
+        b.limb('#4a3c2e', 0, 2.8, 0, -1.0, 4.2, -0.6, 0.16, 0.07, 7);
+        [[0, 4.6, 0, 2.1, 1.5], [1.4, 4.9, 0.5, 1.4, 1.1], [-1.2, 4.8, -0.8, 1.5, 1.1], [0.3, 5.6, -0.4, 1.3, 1.0], [-0.4, 4.2, 1.0, 1.2, 0.9]].forEach(([x, y, z, r, h], i) =>
+          b.sph(i % 2 ? '#56623a' : '#606c40', x, y, z, r, h, r, 10));
         break;
       case 'dead':
-        b.cyl('#3a322c', 0, 2.4, 0, 0.1, 0.32, 4.8, 5);
-        b.cyl('#3a322c', 0.7, 3.4, 0, 0.05, 0.12, 2.0, 4, 0, 0, -0.8);
-        b.cyl('#3a322c', -0.6, 2.8, 0.3, 0.05, 0.1, 1.6, 4, 0.3, 0, 0.9);
-        b.cyl('#3a322c', 0.1, 4.2, -0.5, 0.04, 0.08, 1.4, 4, -0.7, 0, 0.1);
-        b.cyl('#3a322c', -0.4, 4.6, 0.2, 0.03, 0.06, 1.2, 4, 0.2, 0, 0.7);
+        b.cyl('#3a322c', 0, 2.4, 0, 0.1, 0.32, 4.8, 9);
+        b.limb('#3a322c', 0, 2.6, 0, 1.4, 4.0, 0.2, 0.12, 0.04, 6);
+        b.limb('#3a322c', 1.0, 3.6, 0.15, 1.6, 4.6, 0.6, 0.06, 0.02, 5);
+        b.limb('#3a322c', 0, 2.2, 0, -1.2, 3.4, 0.5, 0.11, 0.035, 6);
+        b.limb('#3a322c', 0, 3.6, 0, 0.3, 5.4, -1.0, 0.09, 0.03, 6);
+        b.limb('#3a322c', 0, 4.2, 0, -0.8, 5.6, 0.2, 0.07, 0.02, 5);
+        b.limb('#3a322c', -0.8, 3.1, 0.35, -1.5, 3.6, 1.1, 0.05, 0.015, 5);
         break;
       case 'cactus':
-        b.cyl('#4c6638', 0, 1.6, 0, 0.3, 0.34, 3.2, 7);
-        b.ico('#4c6638', 0, 3.2, 0, 0.3, 0.2, 0.3, 0);
-        b.cyl('#4f6a3a', 0.55, 1.5, 0, 0.17, 0.17, 0.6, 6, 0, 0, Math.PI / 2);
-        b.cyl('#4f6a3a', 0.8, 2.1, 0, 0.17, 0.19, 1.3, 6);
-        b.cyl('#4a6436', -0.5, 1.9, 0, 0.15, 0.15, 0.5, 6, 0, 0, Math.PI / 2);
-        b.cyl('#4a6436', -0.72, 2.35, 0, 0.15, 0.16, 0.9, 6);
+        b.cyl('#4c6638', 0, 1.6, 0, 0.3, 0.34, 3.2, 12);
+        b.sph('#4c6638', 0, 3.2, 0, 0.3, 0.24, 0.3, 12);
+        for (let i = 0; i < 6; i++) b.box('#5a7444', Math.sin(i * 1.05) * 0.32, 1.6, Math.cos(i * 1.05) * 0.32, 0.03, 3.1, 0.03, 0, i * 1.05, 0);
+        b.limb('#4f6a3a', 0.2, 1.4, 0, 0.75, 1.55, 0, 0.17, 0.17, 10); b.sph('#4f6a3a', 0.78, 1.55, 0, 0.17, 0.17, 0.17, 10);
+        b.cyl('#4f6a3a', 0.8, 2.15, 0, 0.16, 0.18, 1.2, 10); b.sph('#4f6a3a', 0.8, 2.75, 0, 0.16, 0.13, 0.16, 10);
+        b.limb('#4a6436', -0.2, 1.8, 0, -0.65, 1.95, 0.1, 0.15, 0.15, 10); b.sph('#4a6436', -0.68, 1.95, 0.1, 0.15, 0.15, 0.15, 10);
+        b.cyl('#4a6436', -0.7, 2.35, 0.1, 0.14, 0.15, 0.8, 10); b.sph('#4a6436', -0.7, 2.75, 0.1, 0.14, 0.11, 0.14, 10);
         break;
       case 'rock':
         b.rock('#7b6a58', 0, 0.5, 0, 1, 0.8, 1);
         b.rock('#6e5e4e', 0.6, 0.3, 0.4, 0.5, 0.45, 0.5);
+        b.rock('#857360', -0.5, 0.2, -0.3, 0.4, 0.3, 0.45);
         break;
       case 'bush':
-        b.ico('#77744a', 0, 0.35, 0, 0.7, 0.45, 0.7, 0);
-        b.ico('#6a6a42', 0.4, 0.3, 0.2, 0.45, 0.35, 0.45, 0);
+        b.sph('#77744a', 0, 0.35, 0, 0.7, 0.42, 0.7, 9);
+        b.sph('#6a6a42', 0.45, 0.3, 0.2, 0.45, 0.33, 0.45, 8);
+        b.sph('#827c4e', -0.3, 0.32, -0.35, 0.42, 0.3, 0.4, 8);
+        for (let i = 0; i < 5; i++) b.limb('#5a4a36', 0, 0, 0, Math.sin(i * 1.3) * 0.6, 0.5, Math.cos(i * 1.3) * 0.6, 0.03, 0.01, 4);
+        break;
+      case 'grass':
+        for (let i = 0; i < 9; i++) {
+          const a = i * 0.7, rr = 0.08 + (i % 3) * 0.1;
+          b.cone(i % 3 ? '#a89660' : '#8a8048', Math.cos(a) * rr, 0.22 + (i % 4) * 0.04, Math.sin(a) * rr, 0.035, 0.45 + (i % 4) * 0.1, 3, Math.sin(a) * 0.4, 0, Math.cos(a) * 0.4);
+        }
         break;
     }
     return b.build();

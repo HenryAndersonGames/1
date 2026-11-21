@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Character, buildBoss } from './characters.js';
 import { PLAYERS } from './story.js';
-import { angleLerp, clamp, dist } from './util.js';
+import { angleLerp, angleDiff, clamp, dist } from './util.js';
 import { LOC, WATER_Y } from './terrain.js';
 
 // ---------- маршруты по улицам ----------
@@ -89,7 +89,19 @@ export class Player extends Actor {
     this.g.ui.flashHurt(this.idx);
     if (this.hp <= 0) { this.hp = 0; this.down(); }
   }
+  mount(h) {
+    this.horse = h; h.rider = this; h.owner = this.idx; h.called = null;
+    this.g.audio.neigh(this.g.camDist(h.x, h.z));
+  }
+  dismount() {
+    const h = this.horse; if (!h) return;
+    h.rider = null; this.horse = null;
+    const p = this.g.world.collide(h.x + Math.cos(h.rot) * 1.3, h.z - Math.sin(h.rot) * 1.3, this.radius);
+    this.x = p.x; this.z = p.z; this.rot = h.rot;
+    this.char.pose = 'idle';
+  }
   down() {
+    this.dismount();
     this.downed = true; this.downT = 35; this.char.setPose('downed');
     this.g.notify(`${this.name} ранен и не может встать!`, 'bad');
     this.g.onPlayerDown(this);
@@ -106,6 +118,7 @@ export class Player extends Actor {
     }
     this.cd -= dt; this.aimT -= dt; this.hurtT -= dt;
     if (this.reloadT > 0) { this.reloadT -= dt; if (this.reloadT <= 0) this.finishReload(); }
+    if (this.horse) { this.updateRiding(dt, c); return; }
     // движение относительно камеры
     const yaw = g.camYaw;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
@@ -148,12 +161,32 @@ export class Player extends Actor {
     this.sync();
     this.light.position.set(this.x, this.char.group.position.y + 2.4, this.z);
   }
+  updateRiding(dt, c) {
+    const g = this.g, h = this.horse, yaw = g.camYaw;
+    h.steer(dt, c);
+    this.x = h.x; this.z = h.z; this.speedNow = h.speed;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    let aim = null;
+    if (c.aimStick) { aim = Math.atan2(rx * c.ax + fx * c.ay, rz * c.ax + fz * c.ay); this.aimT = 0.6; }
+    else if (c.mouseAim) { const p = g.mouseGround(h.saddleY() + 1.6); if (p) aim = Math.atan2(p.x - this.x, p.z - this.z); }
+    this.aimDir = aim !== null ? aim : h.rot;
+    if (c.shoot) this.shoot();
+    if (c.reload) this.startReload();
+    if (c.swap) this.swap();
+    this.rot = h.rot;
+    this.char.pose = this.aimT > 0 ? 'rideAim' : 'ride';
+    this.char.update(dt, 0);
+    const tw = this.aimT > 0 ? clamp(angleDiff(h.rot, this.aimDir), -1.4, 1.4) : 0;
+    this.char.group.position.set(h.x - Math.sin(h.rot) * 0.05, h.saddleY() + 0.8, h.z - Math.cos(h.rot) * 0.05);
+    this.char.group.rotation.y = h.rot + tw;
+    this.light.position.set(this.x, this.char.group.position.y + 2.2, this.z);
+  }
   shoot() {
     const g = this.g;
     if (this.reloadT > 0 || this.cd > 0) return;
     if (this.clip <= 0) { g.audio.click(); this.startReload(); return; }
     this.clip--; this.cd = 0.32; this.aimT = 1.2;
-    this.rot = this.aimDir; this.char.pose = 'aim';
+    if (!this.horse) { this.rot = this.aimDir; this.char.pose = 'aim'; }
     g.fireShot(this, this.aimDir, this.clipType);
     if (this.clip === 0) this.startReload();
   }

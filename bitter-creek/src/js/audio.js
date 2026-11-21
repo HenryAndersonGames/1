@@ -80,6 +80,25 @@ export class Sfx {
     if (!this.ok) return;
     [220, 440, 553, 660, 880].forEach((f, i) => this._tone('sine', f, f * 0.995, 4.5 - i * 0.6, [0.2, 0.12, 0.06, 0.05, 0.03][i], this.sfx));
   }
+  hoof(d = 0, gallop = false) {
+    if (!this.ok) return; const v = this.vol(d * 1.5); if (v <= 0) return;
+    this._noise(0.05, 'bandpass', 900 + Math.random() * 400, 2, 0.35 * v);
+    this._tone('sine', 180 + Math.random() * 40, 90, 0.06, (gallop ? 0.3 : 0.2) * v);
+  }
+  neigh(d = 0) {
+    if (!this.ok) return; const v = this.vol(d); if (v <= 0) return;
+    const c = this.ctx, t = c.currentTime;
+    const o = c.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(520, t); o.frequency.linearRampToValueAtTime(900, t + 0.15); o.frequency.exponentialRampToValueAtTime(260, t + 1.1);
+    const l = c.createOscillator(); l.frequency.value = 22; const lg = c.createGain(); lg.gain.value = 60; l.connect(lg); lg.connect(o.frequency);
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 2;
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16 * v, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+    o.connect(f); f.connect(g); g.connect(this.sfx); o.start(t); l.start(t); o.stop(t + 1.3); l.stop(t + 1.3);
+  }
+  whistle() {
+    if (!this.ok) return;
+    this._tone('sine', 1500, 2300, 0.18, 0.12); this._tone('sine', 2300, 1700, 0.35, 0.12, this.sfx, 0.2);
+  }
   heartbeat(v = 1) { if (!this.ok) return; this._tone('sine', 60, 35, 0.18, 0.5 * v); this._tone('sine', 55, 30, 0.2, 0.4 * v, this.sfx, 0.22); }
 
   startAmbience() {
