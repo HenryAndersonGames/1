@@ -134,7 +134,7 @@ Object.assign(ABIL, {
   blink: { name: 'Теневой шаг', icon: 'ab_dash', cd: 6, req: ['agi', 4], desc: 'Мгновенный скачок вперёд с ударом в точке появления', col: '#9a6aff' },
   mine: { name: 'Мина', icon: 'ab_quake', cd: 10, req: ['eng', 2], desc: 'Ставит мину — взрывается, когда монстр рядом', col: '#d0b040' },
   turret: { name: 'Самострел', icon: 'ab_bolt', cd: 30, req: ['eng', 4], desc: 'Арбалет на треноге 20 с стреляет по монстрам', col: '#c8a070' },
-  vortex: { name: 'Воронка', icon: 'ab_shadow', cd: 14, req: ['oth', 3], desc: 'Стягивает монстров в точку перед тобой и ранит', col: '#8a5aff' },
+  vortex: { name: 'Воронка', icon: 'ab_shadow', cd: 14, req: ['oth', 6], desc: 'Стягивает монстров в точку перед тобой и ранит', col: '#8a5aff' },
   regen: { name: 'Второе дыхание', icon: 'ab_medic', cd: 25, req: ['med', 1], desc: 'Восстанавливает выносливость и лечит 8 с', col: '#9fe39a' },
 });
 function useAbilityExtra(p, id) {
@@ -170,14 +170,14 @@ function updateExtras(dt) {
   for (let i = G.mines.length - 1; i >= 0; i--) {
     const m = G.mines[i]; m.t += dt;
     if (m.t < m.arm) continue;
-    if (G.enemies.some((e) => !e.dead && e.state !== 'dying' && !EDEF[e.type].float && dist2(e.x, e.y, m.x, m.y) < 34 * 34)) { G.mines.splice(i, 1); explode(m.x, m.y, 95, 70); }
+    if (G.enemies.some((e) => !e.dead && e.state !== 'dying' && !EDEF[e.type].float && dist2(e.x, e.y, m.x, m.y) < 34 * 34)) { G.mines.splice(i, 1); explode(m.x, m.y, 95, G.players.some((q) => q.sk.eng >= 8) ? 105 : 70); }
   }
   for (let i = G.turrets.length - 1; i >= 0; i--) {
     const t = G.turrets[i]; t.t -= dt; t.cd -= dt;
     if (t.t <= 0) { burst(t.x, t.y - 10, 10, 10, '#8a6a44', 120, 3); G.turrets.splice(i, 1); continue; }
     let best = null, bd = 320 * 320;
     for (const e of G.enemies) { if (e.dead || e.state === 'dying' || e.hidden) continue; const d = dist2(t.x, t.y, e.x, e.y); if (d < bd && !wallBetween(t.x, t.y, e.x, e.y, e.r)) { bd = d; best = e; } }
-    if (best) { t.face = Math.atan2(best.y - t.y, best.x - t.x); if (t.cd <= 0) { t.cd = 0.55; damageEnemy(best, 14 + 2 * t.owner.sk.eng, t, 120, 0.15); G.tracers.push({ x0: t.x, y0: t.y - 22, x1: best.x, y1: best.y - 24, t: 0.07 }); Sfx.play('throw'); } }
+    if (best) { t.face = Math.atan2(best.y - t.y, best.x - t.x); if (t.cd <= 0) { t.cd = t.owner.sk.eng >= 8 ? 0.28 : 0.55; damageEnemy(best, 14 + 2 * t.owner.sk.eng, t, 120, 0.15); G.tracers.push({ x0: t.x, y0: t.y - 22, x1: best.x, y1: best.y - 24, t: 0.07 }); Sfx.play('throw'); } }
   }
   for (let i = G.vortexes.length - 1; i >= 0; i--) {
     const v = G.vortexes[i]; v.t -= dt; v.tick -= dt;

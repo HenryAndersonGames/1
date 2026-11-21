@@ -81,6 +81,7 @@ function render() {
   for (const k of G.pickups) if (inView(k.x, k.y)) dl.push({ k: k.y, t: 8, o: k });
   for (const pr of G.projs) dl.push({ k: pr.y, t: 9, o: pr });
   for (const a of G.allies) dl.push({ k: a.y, t: 11, o: a });
+  for (const v of G.vehicles) if (inView(v.x, v.y)) dl.push({ k: v.y + v.h / 2, t: 12, o: v });
   if (inView(World.fire.x, World.fire.y)) dl.push({ k: World.fire.y, t: 10, o: World.fire });
   dl.sort((a, b) => a.k - b.k);
   for (const d of dl) {
@@ -97,6 +98,7 @@ function render() {
       case 9: drawProj(ctx, d.o); break;
       case 10: drawFire(ctx, d.o); break;
       case 11: drawAlly(ctx, d.o); break;
+      case 12: drawVehicle(ctx, d.o); break;
     }
   }
   for (const q of G.parts) {
@@ -331,6 +333,7 @@ function playerPoseNow(p) {
 }
 
 function drawPlayer(ctx, p) {
+  if (p.state === 'drive') return;
   if (p.state === 'dead') {
     ctx.strokeStyle = OL; ctx.lineWidth = 6; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 28); ctx.moveTo(p.x - 10, p.y - 19); ctx.lineTo(p.x + 10, p.y - 19); ctx.stroke();
@@ -351,7 +354,7 @@ function drawPlayer(ctx, p) {
   // атака
   if ((p.state === 'atk' || (p.state === 'light' && p.atk && p.atk.gun)) && !p.held) {
     const a = p.atk, A = attackU(p), M = a.M || {};
-    const name = a.anim, P = animPose(name, A.u);
+    const name = a.anim, P = smoothPose(p, animPose(name, A.u), A.ph === 'w' ? 26 : 60);
     let sx = 1, sy = 1, y = p.y;
     if (A.ph === 'w') { sx = 1 - 0.04 * A.q; sy = 1 + 0.04 * A.q; } else if (A.ph === 'a') { sx = 1.05; sy = 0.96; } else { sx = 1 + 0.03 * (1 - A.q); sy = 1 - 0.02 * (1 - A.q); }
     if (name === 'leap') y -= Math.sin(clamp(p.t / (a.wind + a.act), 0, 1) * Math.PI) * 30;
@@ -376,7 +379,7 @@ function drawPlayer(ctx, p) {
     const sq = k < 0.18 ? [1.06, 0.93] : k > 0.82 ? [1.08, 0.9] : [0.95, 1.05];
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 15 * (1 - hop / 70), 6, 0, 0, TAU); ctx.fill();
     ctx.save(); ctx.translate(p.x, p.y - hop); ctx.scale(fl * sq[0] * HERO_SCALE, sq[1] * HERO_SCALE);
-    drawPuppet(ctx, p.i, hopPose(k), { p, flash, weapon: (g, wa) => drawWeaponAt(ctx, p, g, wa) });
+    drawPuppet(ctx, p.i, smoothPose(p, hopPose(k), 30), { p, flash, weapon: (g, wa) => drawWeaponAt(ctx, p, g, wa) });
     ctx.restore(); ctx.globalAlpha = 1; return;
   }
   // ходьба/стойка: вид спереди и сзади
@@ -387,7 +390,7 @@ function drawPlayer(ctx, p) {
     drawPuppetFB(ctx, p.i, view, pose, { p, flash, weapon: p.weapon.type === 'fists' ? null : (g, wa) => drawWeaponAt(ctx, p, g, wa) });
     ctx.restore(); ctx.globalAlpha = 1;
   } else {
-    const P = playerPoseNow(p);
+    const P = smoothPose(p, playerPoseNow(p), 16);
     ctx.save(); ctx.translate(p.x, p.y); ctx.scale(fl * HERO_SCALE, HERO_SCALE);
     drawPuppet(ctx, p.i, P, { p, flash, weapon: p.held ? null : (g, wa) => drawWeaponAt(ctx, p, g, wa) });
     ctx.restore(); ctx.globalAlpha = 1;
@@ -689,7 +692,7 @@ function drawHUD(ctx) {
 }
 
 // ---------- Миникарта: местность рисуется один раз, поверх — туман неизведанного, герои, дом, монстры ----------
-const MM = { k: 1 / 26, c: null, fog: null, seen: null, cs: 64, dirty: true };
+const MM = { k: 1 / 32, c: null, fog: null, seen: null, cs: 64, dirty: true };
 function buildMinimap() {
   const k = MM.k, w = Math.ceil(WORLD_W * k), h = Math.ceil(WORLD_H * k);
   const c = MM.c || (MM.c = document.createElement('canvas')); c.width = w; c.height = h;
@@ -847,45 +850,44 @@ function drawPlayerHUD(ctx, p, ax, dir) {
   if (p.rageT > 0) inkText(ctx, `Ярость ${p.rageT.toFixed(0)}`, X(250), 154, '#ff7050', 12, true, dir > 0 ? 'left' : 'right');
   else if (p.stoneT > 0) inkText(ctx, `Камень ${p.stoneT.toFixed(0)}`, X(250), 154, '#c0c4cc', 12, true, dir > 0 ? 'left' : 'right');
   if (p.state === 'atk' && p.comboN >= 2) inkText(ctx, `Комбо ×${p.comboN}`, X(326), 118, '#ffe08a', 15, true, dir > 0 ? 'left' : 'right');
-  if (p.menu) drawSkillMenu(ctx, p, dir > 0 ? ax : ax - 330, 168);
+  if (p.menu) drawSkillMenu(ctx, p, dir > 0 ? ax : ax - 600, 168);
   if (p.craft) drawCraftMenu(ctx, p, dir > 0 ? ax : ax - 330, 168);
 }
 
+// ---------- Древо развития: 6 веток × 8 уровней, способности — прямо в узлах ----------
 function drawSkillMenu(ctx, p, x, my) {
-  const pal = PAL[p.i];
-  const ids = Object.keys(ABIL);
-  const hgt = p.menuTab === 0 ? 50 + SKILLS.length * 50 : 70 + ids.length * 28;
-  panel(ctx, x, my, 330, hgt);
-  inkText(ctx, p.menuTab === 0 ? `Навыки · очков: ${p.pts}` : 'Способности', x + 14, my + 24, pal.accent, 15);
-  inkText(ctx, p.menuTab === 0 ? '◀▶ способности' : '◀▶ навыки', x + 318, my + 24, '#8f846c', 11, false, 'right');
-  if (p.menuTab === 0) {
-    SKILLS.forEach((s, i) => {
-      const yy = my + 32 + i * 50, lv = p.sk[s.id], sel = p.menuSel === i;
-      if (sel) { ctx.fillStyle = 'rgba(255,230,170,0.1)'; ctx.fillRect(x + 8, yy, 314, 46); ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.strokeRect(x + 8, yy, 314, 46); }
-      icon(ctx, s.icon, x + 30, yy + 23, 30);
-      inkText(ctx, s.name, x + 52, yy + 18, '#f2e6c8', 14);
-      for (let k = 0; k < 5; k++) { ctx.fillStyle = k < lv ? pal.accent : 'rgba(255,255,255,0.12)'; ctx.fillRect(x + 206 + k * 22, yy + 9, 18, 9); ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.strokeRect(x + 206 + k * 22, yy + 9, 18, 9); }
-      ctx.font = `11px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'left';
-      ctx.fillText(lv < 5 ? `${lv + 1}: ${s.lv[lv]} (${skillCost(lv)} оч.)` : 'Максимум', x + 52, yy + 36);
-    });
-    ctx.font = `11px ${FONT}`; ctx.fillStyle = '#8f846c'; ctx.textAlign = 'left';
-    ctx.fillText(`${Input.btn(p.i, 'light')} — изучить · ${Input.btn(p.i, 'roll')} — закрыть`, x + 14, my + hgt - 8);
-  } else {
-    ids.forEach((id, i) => {
-      const yy = my + 34 + i * 28, A = ABIL[id], ok = abilityUnlocked(p, id), sel = p.abSel === i;
-      if (sel) { ctx.fillStyle = 'rgba(255,230,170,0.1)'; ctx.fillRect(x + 8, yy - 2, 314, 27); ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.strokeRect(x + 8, yy - 2, 314, 27); }
-      if (!ok) ctx.globalAlpha = 0.4;
-      icon(ctx, A.icon, x + 24, yy + 12, 24);
-      inkText(ctx, A.name, x + 42, yy + 11, '#f2e6c8', 13);
-      ctx.font = `10px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'left';
-      ctx.fillText(ok ? A.desc : `Нужно: ${SKILLS.find((s) => s.id === A.req[0]).name} ${A.req[1]}`, x + 42, yy + 23);
-      const sl = p.slots.indexOf(id);
-      if (sl >= 0) inkText(ctx, Input.btn(p.i, 'ab' + (sl + 1)), x + 316, yy + 16, pal.accent, 12, true, 'right');
-      ctx.globalAlpha = 1;
-    });
-    ctx.font = `11px ${FONT}`; ctx.fillStyle = '#8f846c'; ctx.textAlign = 'left';
-    ctx.fillText(`Выбери и нажми кнопку слота: ${[1, 2, 3, 4, 5].map((k) => Input.btn(p.i, 'ab' + k)).join(' / ')}`, x + 14, my + hgt - 10);
-  }
+  const pal = PAL[p.i], W = 600, H = 520, colW = W / SKILLS.length, rowH = 40, top = my + 58;
+  if (x + W > Render.W / (Render.H / 720)) x = Render.W / (Render.H / 720) - W - 14;
+  panel(ctx, x, my, W, H);
+  inkText(ctx, 'Древо развития', x + 16, my + 26, pal.accent, 17);
+  inkText(ctx, `очков: ${p.pts}`, x + W - 16, my + 26, p.pts > 0 ? '#ffe08a' : '#8f846c', 15, true, 'right');
+  const row = p.treeRow ?? 0;
+  SKILLS.forEach((s, ci) => {
+    const cx = x + colW * ci + colW / 2, lv = p.sk[s.id], selC = p.menuSel === ci;
+    icon(ctx, s.icon, cx, my + 44, 22);
+    // линия ветки
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, top + rowH * (SKILL_MAX - 1)); ctx.stroke();
+    if (lv > 0) { ctx.strokeStyle = s.col; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, top + rowH * (lv - 1)); ctx.stroke(); }
+    for (let k = 0; k < SKILL_MAX; k++) {
+      const ny = top + rowH * k, got = k < lv, next = k === lv, ab = abilityAt(s.id, k + 1), sel = selC && row === k;
+      ctx.beginPath(); ctx.arc(cx, ny, ab ? 14 : 10, 0, TAU);
+      ctx.fillStyle = got ? s.col : next ? 'rgba(255,240,200,0.16)' : 'rgba(0,0,0,0.45)'; ctx.fill();
+      ctx.strokeStyle = sel ? '#fff4c8' : got ? OL : 'rgba(200,190,160,0.35)'; ctx.lineWidth = sel ? 3.5 : 2; ctx.stroke();
+      if (ab) { ctx.globalAlpha = got ? 1 : 0.45; icon(ctx, ABIL[ab].icon, cx, ny, 22); ctx.globalAlpha = 1; const sl = p.slots.indexOf(ab); if (sl >= 0) glyph(ctx, Input.btn(p.i, 'ab' + (sl + 1)), cx + 15, ny + 10, 7); }
+      else inkText(ctx, String(k + 1), cx, ny + 4, got ? '#1a110b' : '#8f846c', 11, true, 'center');
+      if (next && p.pts >= skillCost(k)) { ctx.strokeStyle = `rgba(255,224,138,${0.5 + Math.sin(G.t * 6) * 0.3})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, ny, 17, 0, TAU); ctx.stroke(); }
+    }
+    inkText(ctx, s.name, cx, top + rowH * SKILL_MAX - 10, selC ? '#fff4c8' : '#b8ac90', 11, true, 'center');
+  });
+  // описание выбранного узла
+  const s = SKILLS[p.menuSel], lv = p.sk[s.id], ab = abilityAt(s.id, row + 1);
+  const iy = top + rowH * SKILL_MAX + 6;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x + 10, iy, W - 20, H - (iy - my) - 30);
+  inkText(ctx, `${s.name} · уровень ${row + 1}${row < lv ? ' — изучено' : row === lv ? ` — цена ${skillCost(lv)} оч.` : ' — сначала прошлые уровни'}`, x + 20, iy + 20, s.col, 14);
+  ctx.font = `13px ${FONT}`; ctx.fillStyle = '#e6dcc4'; ctx.textAlign = 'left'; ctx.fillText(s.lv[row], x + 20, iy + 40);
+  if (ab) { ctx.fillStyle = '#c8b8ff'; ctx.fillText(`«${ABIL[ab].name}»: ${ABIL[ab].desc} (перезарядка ${ABIL[ab].cd} с)`, x + 20, iy + 58); }
+  ctx.font = `11px ${FONT}`; ctx.fillStyle = '#8f846c';
+  ctx.fillText(`◀▶ ветка · ▲▼ уровень · ${Input.btn(p.i, 'light')} — изучить · ${[1, 2, 3, 4, 5].map((k) => Input.btn(p.i, 'ab' + k)).join('/')} — поставить способность в слот · ${Input.btn(p.i, 'roll')} — закрыть`, x + 16, my + H - 10);
 }
 
 function drawCraftMenu(ctx, p, x, my) {

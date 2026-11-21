@@ -38,7 +38,7 @@ def cutout(img):
     rgba[soft, :3] = [42, 36, 46]; rgba[soft, 3] = a[soft] * 255
     return rgba
 
-OUTLINE = 6  # толщина общего контура в пикселях видео — как у остальной графики игры
+OUTLINE = 3  # толщина общего контура в пикселях видео — как у остальной графики игры
 def dilate(m, r):
     out = m.copy()
     for dy in range(-r, r + 1):

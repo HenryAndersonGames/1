@@ -2,12 +2,12 @@
 // ---------- Состояние игры, день/ночь, волны, камера ----------
 const VIEW_H = 620;
 const ZOOM_MIN = 0.62;
-const DAY_LEN = 140, DUSK_LEN = 20, NIGHT_LEN = 85;
+const DAY_LEN = 250, DUSK_LEN = 25, NIGHT_LEN = 90; // день длиннее — успеть добраться до дальних зон
 
 const G = {
   state: 'title', t: 0, day: 1, phase: 'day', phaseT: 0,
   team: {}, players: [], enemies: [], items: [], pickups: [], projs: [], parts: [], texts: [], stains: [], msgs: [],
-  tracers: [], flashes: [], eprojs: [], webs: [], fires: [], waves: [], bolts: [], allies: [], bombs: [], sparks: [], dmgNums: [], mines: [], turrets: [], vortexes: [], rubble: [], camKick: null, slowT: 0, ambT: 3,
+  tracers: [], flashes: [], eprojs: [], webs: [], fires: [], waves: [], bolts: [], allies: [], bombs: [], sparks: [], dmgNums: [], mines: [], turrets: [], vortexes: [], vehicles: [], rubble: [], camKick: null, slowT: 0, ambT: 3,
   spawnQ: [], kills: 0, cam: { x: 2368, y: 1900, zoom: 1 }, shake: 0, hitstop: 0, flowT: 0, flowDirty: true, overT: 0,
   paused: false, showFps: true, quality: 1, bestNight: 0, zoneShown: {},
 };
@@ -27,7 +27,7 @@ function newGame(solo = G.solo) {
   G.players = G.solo ? [makePlayer(0, f.x, f.y - 50)] : [makePlayer(0, f.x - 50, f.y - 50), makePlayer(1, f.x + 50, f.y - 50)];
   if (G.players[1]) G.players[1].weapon = { type: 'pipe', dur: WEAPONS.pipe.durab };
   if (G.solo) G.team.band = 2;
-  for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies', 'bombs', 'sparks', 'dmgNums', 'rubble', 'mines', 'turrets', 'vortexes']) G[k] = [];
+  for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies', 'bombs', 'sparks', 'dmgNums', 'rubble', 'mines', 'turrets', 'vortexes', 'vehicles']) G[k] = [];
   G.cam.x = f.x; G.cam.y = f.y - 80; G.cam.zoom = 1;
   G.flowDirty = true;
   // подручные предметы и находки
@@ -82,6 +82,9 @@ function spawnDayNatives() {
   put('industrial', 'walker', 3); if (n >= 2) put('industrial', 'brute', 1); put('industrial', 'clinger', 2);
   for (let i = 0; i < 3 + Math.min(3, n); i++) { const f = pick(World.fields); const e = spawnEnemy('spider', f.x + rand(30, f.w - 30), f.y + rand(30, f.h - 30), false); e.home = { x: e.x, y: e.y }; }
   put('lab', 'void', 2 + Math.min(2, n - 1)); put('lab', 'walker', 2);
+  group('village', 'ghoul', 3 + Math.min(3, n)); put('village', 'walker', 3);
+  put('depot', 'walker', 3); put('depot', 'clinger', 3); if (n >= 2) put('depot', 'brute', 1);
+  put('camp', 'walker', 2); if (n >= 2) put('camp', 'jumper', 2);
   if (n >= 3) put('forest', 'jumper', 2);
 }
 function spawnWolfPack(k) {
@@ -128,7 +131,8 @@ function planNight(n) {
     i += grp; t += span / Math.ceil(list.length / 2.5);
   }
   if (n >= 2) G.spawnQ.push({ t: NIGHT_LEN * 0.3, wolves: 2 + Math.floor(n / 2) });
-  if (n % 5 === 0) G.spawnQ.push({ t: NIGHT_LEN * 0.4, types: ['titan'], titan: true });
+  // огромные титаны — с 4-й ночи через ночь, потом по двое
+  if (n >= 4 && n % 2 === 0) G.spawnQ.push({ t: NIGHT_LEN * 0.35, types: Array(n >= 10 ? 2 : 1).fill('titan'), titan: true });
   G.spawnQ.sort((a, b) => a.t - b.t);
 }
 
@@ -169,6 +173,8 @@ function dawn() {
     else if (p.state === 'downed') { p.state = 'normal'; p.hp = p.maxHp * 0.3; }
     else p.hp = Math.min(p.maxHp, p.hp + 25);
     giveXP(p, 40 + 10 * G.day);
+    const bonus = 1 + Math.floor(G.day / 3); p.pts += bonus; p.selfRev = false;
+    floatText(p.x, p.y - 110, `+${bonus} очк. навыков за ночь`, '#ffe08a', 15);
   }
   if (World.gen.on) { World.gen.fuel--; World.gen.on = false; }
   msg(`Рассвет. Пережито ночей: ${G.day}. +опыт`, '#fff2b0'); Sfx.play('dawn');
@@ -259,6 +265,7 @@ function update(dt) {
   updateHazards(dt);
   updateAllies(dt);
   updateExtras(dt);
+  updateVehicles(dt);
   updatePickups(dt);
   updateParts(dt);
   for (const s of World.structs) {
@@ -271,6 +278,8 @@ function update(dt) {
     const z = zoneAt(p.x, p.y);
     if (z !== 'forest' && !G.zoneShown[z]) { G.zoneShown[z] = 1; const Z = World.zones.find((q) => q.id === z); msg(`${Z.name}`, '#f2e6c8'); }
   }
+  // Медицина 8: раз за ночь встаёшь сам
+  for (const p of G.players) if (p.state === 'downed' && p.sk.med >= 8 && !p.selfRev) { p.selfT = (p.selfT || 0) + dt; if (p.selfT > 2.5) { p.selfT = 0; p.selfRev = true; p.state = 'normal'; p.hp = p.maxHp * 0.5; p.inv = 2; floatText(p.x, p.y - 100, 'Второе дыхание!', '#9fe39a', 16); Sfx.play('revive'); } }
   // одиночная игра: без сознания — через 3 с бинт поднимает героя
   if (G.solo) for (const p of G.players) {
     if (p.state === 'downed' && G.team.band > 0) { p.soloT = (p.soloT || 0) + dt; if (p.soloT > 3) { p.soloT = 0; G.team.band--; p.state = 'normal'; p.hp = p.maxHp * 0.4; p.inv = 2; floatText(p.x, p.y - 100, 'Бинт! Встаю', '#9fe39a', 16); Sfx.play('revive'); } }

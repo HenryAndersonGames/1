@@ -163,10 +163,21 @@ const PZ = {
 const lerpPose = (A, B, t) => { const o = {}; for (const k in A) o[k] = A[k] + (B[k] - A[k]) * t; return o; };
 const ease = (t) => t * t * (3 - 2 * t);
 function animPose(name, u) { const F = ANIM[name], i = clamp(Math.floor(u), 0, F.length - 2); return lerpPose(F[i], F[i + 1], ease(clamp(u - i, 0, 1))); }
+// плавный переход между позами (без рывков при смене анимации): поза догоняет цель с инерцией
+function smoothPose(o, P, rate) {
+  const k = 1 - Math.exp(-rate / 60);
+  if (!o.poseS || o.poseS.__t !== undefined && G.t - o.poseS.__t > 0.2) { o.poseS = Object.assign({}, P); o.poseS.__t = G.t; return P; }
+  const S = o.poseS;
+  for (const key in P) S[key] = S[key] === undefined ? P[key] : S[key] + (P[key] - S[key]) * k;
+  S.__t = G.t;
+  const out = {}; for (const key in P) out[key] = S[key];
+  return out;
+}
 function walkPose(ph, carry) {
   const s = Math.sin(ph), c = Math.cos(ph);
-  return KP({ lean: 4, hy: Math.abs(c) * -1.4 + 0.6, tf: 24 * s, kf: 6 + 34 * Math.max(0, c) * (s > -0.3 ? 1 : 0.4), tb: -24 * s, kb: 6 + 34 * Math.max(0, -c) * (s < 0.3 ? 1 : 0.4),
-    sf: carry ? 172 : -20 * s, ef: carry ? 30 : 18 + 14 * Math.max(0, s), sb: carry ? 168 : 20 * s, eb: carry ? 30 : 18 + 14 * Math.max(0, -s), hd: carry ? -6 : 0 });
+  // корпус чуть покачивается в такт шагу, голова гасит качку — походка живее
+  return KP({ lean: 4 + Math.sin(ph * 2) * 1.6, hy: Math.abs(c) * -1.4 + 0.6, tf: 24 * s, kf: 6 + 34 * Math.max(0, c) * (s > -0.3 ? 1 : 0.4), tb: -24 * s, kb: 6 + 34 * Math.max(0, -c) * (s < 0.3 ? 1 : 0.4),
+    sf: carry ? 172 : -20 * s, ef: carry ? 30 : 18 + 14 * Math.max(0, s), sb: carry ? 168 : 20 * s, eb: carry ? 30 : 18 + 14 * Math.max(0, -s), hd: carry ? -6 : -Math.sin(ph * 2) * 1.2 });
 }
 function idlePose(t) { const b = Math.sin(t * 2.2); return KP({ hy: 0.4 + b * 0.5, hd: b * 1.5, sf: 4 + b * 2, ef: 12 + b * 3, sb: -4 - b * 2, eb: 12 + b * 3, kf: 5, kb: 5 }); }
 function hopPose(k) {

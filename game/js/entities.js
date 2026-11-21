@@ -57,6 +57,7 @@ function updatePlayer(p, c, dt) {
   for (const k in p.abCd) p.abCd[k] -= dt;
   p.hint = '';
   if (p.state === 'dead') return;
+  if (p.state === 'drive') { if (p.veh) driveUpdate(p, c, dt); else p.state = 'normal'; return; }
   p.x += p.kx * dt; p.y += p.ky * dt;
   const kd = Math.pow(0.0008, dt); p.kx *= kd; p.ky *= kd;
 
@@ -82,17 +83,20 @@ function updatePlayer(p, c, dt) {
   // меню навыков / крафта
   if (c.pressed.menu && !p.craft) { p.menu = !p.menu; Sfx.play('menu'); }
   if (p.menu) {
-    if (c.pressed.left || c.pressed.right) { p.menuTab = 1 - p.menuTab; Sfx.play('menu'); }
-    if (p.menuTab === 0) menuNav(p, c, 'menuSel', SKILLS.length, () => buySkill(p, SKILLS[p.menuSel].id), () => { p.menu = false; });
-    else {
-      const ids = Object.keys(ABIL);
-      menuNav(p, c, 'abSel', ids.length, () => {}, () => { p.menu = false; });
-      for (let k = 0; k < 5; k++) if (c.pressed['ab' + (k + 1)]) {
-        const id = ids[p.abSel];
-        if (!abilityUnlocked(p, id)) { Sfx.play('deny'); continue; }
-        const old = p.slots.indexOf(id); if (old >= 0) p.slots[old] = p.slots[k];
-        p.slots[k] = id; Sfx.play('level');
-      }
+    // древо: ◀▶ — ветка, ▲▼ — уровень, X — изучить следующий уровень ветки, кнопка слота — поставить способность узла
+    p.treeRow = p.treeRow ?? 0;
+    if (c.pressed.left) { p.menuSel = (p.menuSel + SKILLS.length - 1) % SKILLS.length; Sfx.play('menu'); }
+    if (c.pressed.right) { p.menuSel = (p.menuSel + 1) % SKILLS.length; Sfx.play('menu'); }
+    if (c.pressed.up) { p.treeRow = Math.max(0, p.treeRow - 1); Sfx.play('menu'); }
+    if (c.pressed.down) { p.treeRow = Math.min(SKILL_MAX - 1, p.treeRow + 1); Sfx.play('menu'); }
+    const br = SKILLS[p.menuSel];
+    if (c.pressed.light || c.pressed.interact) { buySkill(p, br.id); p.treeRow = Math.min(SKILL_MAX - 1, p.sk[br.id]); }
+    if (c.pressed.roll) { p.menu = false; p.buf = {}; }
+    const nodeAb = abilityAt(br.id, p.treeRow + 1);
+    for (let k = 0; k < 5; k++) if (c.pressed['ab' + (k + 1)]) {
+      if (!nodeAb || !abilityUnlocked(p, nodeAb)) { Sfx.play('deny'); floatText(p.x, p.y - 110, nodeAb ? 'Сначала изучи этот уровень' : 'В этом узле нет способности', '#ff9a8a', 13); continue; }
+      const old = p.slots.indexOf(nodeAb); if (old >= 0) p.slots[old] = p.slots[k];
+      p.slots[k] = nodeAb; Sfx.play('level'); floatText(p.x, p.y - 110, `${ABIL[nodeAb].name} → ${Input.btn(p.i, 'ab' + (k + 1))}`, '#c8a8ff', 14);
     }
     collideWorld(p, p.r, null); return;
   }
@@ -108,7 +112,7 @@ function updatePlayer(p, c, dt) {
   if ((c.ax || c.ay) && !busy) p.face = Math.atan2(c.ay, c.ax);
   else if (p.moving && !busy) p.face = Math.atan2(c.my, c.mx);
 
-  let spd = 160 * (1 + 0.06 * p.sk.agi + (p.sk.agi >= 4 ? 0.05 : 0)) * gearSpdMul(p);
+  let spd = 160 * (1 + 0.06 * Math.min(p.sk.agi, 6) + (p.sk.agi >= 4 ? 0.05 : 0) + (p.sk.agi >= 8 ? 0.1 : 0)) * gearSpdMul(p);
   if (p.held && p.held.kind === 'furn') spd *= 0.5 + 0.08 * p.sk.str;
   if (p.clingers.length) spd *= 0.5;
   if (p.webT > 0) spd *= 0.4;
@@ -184,7 +188,7 @@ function updatePlayer(p, c, dt) {
       floatText(p.x, p.y - 116, `Стряхнуть: ${p.shake}/3`, '#ffb0a0', 14);
       if (p.shake >= 3) shakeOffClingers(p);
     } else {
-      const cost = Math.max(8, 25 - 3 * p.sk.agi - (p.sk.agi >= 4 ? 3 : 0)) * (1 - gearSum(p, 'roll'));
+      const cost = Math.max(8, 25 - 3 * p.sk.agi - (p.sk.agi >= 4 ? 3 : 0)) * (1 - gearSum(p, 'roll')) * (p.sk.agi >= 7 ? 0.7 : 1);
       if (p.st >= cost && !(p.held && p.held.kind === 'furn')) {
         p.st -= cost; p.state = 'roll'; p.t = 0.32; burst(p.x, p.y, 2, 6, '#5a5040', 90, 3, 0.4); p.perfectDone = false; p.atk = null; p.queue = null; p.search = null;
         if (mv > 0.1) { p.rollDx = c.mx / mv; p.rollDy = c.my / mv; } else { p.rollDx = Math.cos(p.face); p.rollDy = Math.sin(p.face); }
@@ -222,14 +226,14 @@ function menuNav(p, c, key, n, ok, close) {
 
 function buySkill(p, id) {
   const lvl = p.sk[id];
-  if (lvl >= 5) { Sfx.play('deny'); return; }
+  if (lvl >= SKILL_MAX) { Sfx.play('deny'); return; }
   const cost = skillCost(lvl);
   if (p.pts < cost) { Sfx.play('deny'); floatText(p.x, p.y - 124, `Нужно очков: ${cost}`, '#ff9a8a', 14); return; }
   p.pts -= cost; p.sk[id]++;
   Sfx.play('level');
   floatText(p.x, p.y - 124, SKILLS.find((s) => s.id === id).name + ' ' + p.sk[id], PAL[p.i].accent, 16);
+  if (id === 'med') p.maxHp = 100 + (p.sk.med >= 6 ? 20 : 0);
   autoSlot(p);
-  if (p.pts === 0 && p.menuTab === 0) p.menu = false;
 }
 
 // ----- Видимость: удары, способности и действия не проходят сквозь стены и закрытые двери -----
@@ -286,6 +290,7 @@ function startMove(p, id, M) {
   const B = M.base === 'H' ? W.H : W.L;
   let wind = M.wind === 1 ? W.H.wind : M.wind, rec = M.rec === 1 ? W.H.rec : M.rec;
   if (M.base === 'H' && p.sk.mar >= 4) wind *= 0.6;
+  if (M.base === 'L' && p.sk.mar >= 6) { wind *= 0.85; rec *= 0.85; }
   let weak = false;
   if (M.base === 'H') { if (p.st >= 16) p.st -= 16; else weak = true; }
   p.state = 'atk'; p.t = 0;
@@ -327,6 +332,7 @@ function queueAttack(p, kind) {
 function endAttack(p) { p.state = 'normal'; p.atk = null; }
 
 // ----- Особые способности (3 кнопки) -----
+function abilityAt(br, lv) { return Object.keys(ABIL).find((id) => ABIL[id].req[0] === br && ABIL[id].req[1] === lv) || null; }
 function abilityUnlocked(p, id) { const r = ABIL[id].req; return p.sk[r[0]] >= r[1]; }
 function autoSlot(p) {
   for (const id of Object.keys(ABIL)) {
@@ -339,7 +345,8 @@ function useAbility(p, slot) {
   const id = p.slots[slot];
   if (!id) { floatText(p.x, p.y - 120, 'Слот пуст — способности в меню навыков', '#bbb', 12); return; }
   if (p.abCd[id] > 0) { floatText(p.x, p.y - 120, `${ABIL[id].name}: ${p.abCd[id].toFixed(1)} с`, '#bbb', 12); Sfx.play('deny'); return; }
-  p.abCd[id] = ABIL[id].cd;
+  p.abCd[id] = ABIL[id].cd * (1 - (p.sk.oth >= 6 ? 0.2 : 0) - (p.sk.oth >= 8 ? 0.2 : 0));
+  if (p.sk.oth >= 7) p.inv = Math.max(p.inv, 1);
   const fx = Math.cos(p.face), fy = Math.sin(p.face);
   const foes = (r, x = p.x, y = p.y) => G.enemies.filter((e) => !e.dead && e.state !== 'dying' && e.state !== 'cling' && e.state !== 'held' && dist(x, y, e.x, e.y) < r + e.r && !wallBetween(x, y, e.x, e.y, e.r));
   switch (id) {
@@ -457,7 +464,10 @@ function meleeHit(p) {
   const a = p.atk, M = a.M, B = a.B, W = wep(p), heavy = M.base === 'H';
   let dmg = B.dmg * M.k * (1 + 0.15 * Math.min(p.sk.str, 3) + (p.sk.str >= 4 ? 0.15 : 0)) * gearDmgMul(p);
   let crit = '';
-  if (p.rollStrike > 0) { dmg *= 2; p.rollStrike = 0; crit = 'Удар с переката!'; }
+  dmg *= 1 + (p.sk.str >= 6 ? 0.1 : 0) + (p.sk.str >= 8 ? 0.15 : 0);
+  if (p.sk.mar >= 7 && (p.comboN || 0) >= 4) dmg *= 1.3;
+  if (p.sk.mar >= 8 && Math.random() < 0.15) { dmg *= 2; crit = 'Крит!'; }
+  if (p.rollStrike > 0) { dmg *= p.sk.agi >= 8 ? 3 : 2; p.rollStrike = 0; crit = 'Удар с переката!'; }
   if (a.weak) dmg *= 0.6;
   if (a.charge > 0.25) { const k = Math.min(1, a.charge / 1.2); dmg *= 1 + 0.7 * k; if (k >= 1) crit = crit || 'Заряженный удар!'; }
   let cstun = 0;
@@ -505,7 +515,7 @@ function meleeHit(p) {
     damageProp(pr, dmg, p); hit++;
   }
   // стены: если перед героем стена — долбим её (лёгкие удары слабее, тяжёлые/заряженные — сильнее)
-  if (!hit) hit = hitWall(p, reach, heavy, dmg * (a.charge > 0.25 ? 1.6 : 1));
+  if (!hit) hit = hitWall(p, reach, heavy, dmg * (a.charge > 0.25 ? 1.6 : 1) * (p.sk.str >= 6 ? 2 : 1));
   // рубим деревья
   if (!hit) for (const t of World.trees) {
     if (Math.abs(t.x - p.x) > 100 || Math.abs(t.y - p.y) > 100) continue;
@@ -559,13 +569,14 @@ function hurtPlayer(p, dmg, src) {
       if (f.hp <= 0) { p.held = null; f.carried = false; destroyStruct(f); }
     }
   }
+  if (p.state === 'drive') dmg *= 0.4;
   dmg *= gearDefMul(p); wearGear(p, dmg);
   if (p.armor > 0) { const a = dmg * 0.35; p.armor = Math.max(0, p.armor - a); dmg -= a; if (p.armor <= 0) floatText(p.x, p.y - 124, 'Броня разбита!', '#b0c0d0', 14); }
   p.hp -= dmg; p.inv = 0.45; p.hurtT = 0.3; p.reviveTgt = null; p.revive = 0; p.search = null;
   if (src) { const a = Math.atan2(p.y - src.y, p.x - src.x); p.kx += Math.cos(a) * 260; p.ky += Math.sin(a) * 260; }
   burst(p.x, p.y, 30, 6, '#7a1a14', 140, 3);
   addShake(4); Sfx.play('hurt');
-  if (p.state === 'light' || (p.state === 'atk' && p.t < p.atk.wind && p.sk.str < 3)) { p.state = 'normal'; p.atk = null; }
+  if (p.sk.str < 8 && (p.state === 'light' || (p.state === 'atk' && p.t < p.atk.wind && p.sk.str < 3))) { p.state = 'normal'; p.atk = null; }
   if (p.hp <= 0) { downPlayer(p); return; }
   // мощный удар сбивает с ног (Сила 4 — устоять)
   if (src && dmg >= 22 && p.sk.str < 4 && p.state !== 'roll') {
@@ -602,6 +613,7 @@ function useBandage(p) {
   G.team.band--;
   const h = 35 * (p.sk.med >= 1 ? 1.5 : 1);
   p.hp = Math.min(p.maxHp, p.hp + h); floatText(p.x, p.y - 116, `+${Math.round(h)}`, '#9fe39a', 16);
+  if (p.sk.med >= 7) p.regenAb = Math.max(p.regenAb || 0, 5);
   if (ally) { o.hp = Math.min(o.maxHp, o.hp + h); floatText(o.x, o.y - 90, `+${Math.round(h)}`, '#9fe39a', 16); }
   Sfx.play('revive');
 }
@@ -638,6 +650,8 @@ function interactTarget(p) {
 }
 
 function interact(p) {
+  const vn = !p.held && vehicleNear(p);
+  if (vn && enterVehicle(p, vn)) return;
   const t = interactTarget(p);
   if (!t) return;
   switch (t.t) {
@@ -812,6 +826,8 @@ function barricadeSpec(p) {
 }
 function buildOrRepair(p) {
   if (p.held) return;
+  const wr = wreckNear(p);
+  if (wr && repairVehicle(p, wr)) return;
   const r = repairTarget(p);
   if (r && r.kind === 'furn') {
     if (G.team.wood < 1) { msg('Укрепить: нужно 1 дерево', '#ff9a8a'); Sfx.play('deny'); return; }
@@ -858,6 +874,7 @@ function placeTrap(p) {
 
 function computeHint(p) {
   const b = (a) => Input.btn(p.i, a);
+  if (!p.held) { const vn = vehicleNear(p); if (vn) { p.hint = `${b('interact')}: сесть ${vn.driver ? 'пассажиром' : 'за руль'}`; return; } const wr = wreckNear(p); if (wr && (p.sk.eng >= 2 || wr.searched)) { p.hint = `${b('build')}: починить машину (Инж. 2, 3 хлама, 1 дерево)`; return; } }
   if (p.held) {
     if (p.held.kind === 'furn') p.hint = `${b('interact')}: поставить` + (p.sk.str >= 2 ? `  ${b('light')}: бросить` : '') + '  (щит)';
     else p.hint = `${b('light')}/${b('heavy')}: бросить  ${b('interact')}: положить`;
@@ -883,6 +900,7 @@ function computeHint(p) {
 // ===== Постройки =====
 function damageStruct(s, dmg) {
   if (s.hp <= 0 || s.broken) return;
+  if (s.kind !== 'loot' && s.kind !== 'trap' && G.players.some((q) => q.sk.eng >= 7)) dmg /= 1.5;
   s.hp -= dmg; s.flash = 0.12;
   burst(s.x + s.w / 2, s.y + s.h / 2, 20, 4, '#7a5c3a', 120, 3);
   Sfx.play('wood');
@@ -1034,7 +1052,7 @@ function updateProjs(dt) {
         pr.hit.add(e);
         if (pr.kind === 'enemy') { damageEnemy(e, 40 + 8 * pr.owner.sk.str, pr, 420, 1); floatText(e.x, e.y - 60, 'Сбил!', '#ffe08a', 14); addShake(4); continue; }
         const th = THROWN[pr.kind];
-        const dmg = pr.kind === 'furn' ? 55 + 10 * pr.owner.sk.str : th.dmg;
+        const dmg = pr.kind === 'furn' ? (55 + 10 * pr.owner.sk.str) * (pr.owner.sk.str >= 7 ? 2 : 1) : th.dmg;
         damageEnemy(e, dmg, pr, pr.kind === 'furn' ? 450 : 220, pr.kind === 'furn' ? 1 : th.stun);
         Sfx.play('hit'); addShake(3);
         if (pr.kind !== 'furn') { land = true; pr.vx *= -0.2; pr.vy *= -0.2; }

@@ -91,6 +91,8 @@ const RIGS = {
 // тело прилипалы без ножек (ножки — процедурно в игре)
 function clingerTorso() { return C1.clingerBody(0, true); }
 
+// тонкий контур: обводки рига в ~2 раза тоньше, чем у предметов окружения (мягче силуэт)
+const thin = (svgText) => svgText.replace(/stroke-width="([\d.]+)"/g, (_, w) => `stroke-width="${(+w * 0.5).toFixed(2)}"`);
 function build(out) {
   const meta = (out.__meta = out.__meta || {});
   meta.rigs = {};
@@ -100,7 +102,7 @@ function build(out) {
       const [bx, by, bw, bh] = l.box;
       const body = l.fn(!!l.dk);
       if (!l.j) {
-        out[`rig_${type}_${l.n}`] = svg(bx, by, bw, bh, body);
+        out[`rig_${type}_${l.n}`] = thin(svg(bx, by, bw, bh, body));
         M.layers.push({ n: l.n, at: l.at, torso: 1 });
         continue;
       }
@@ -108,8 +110,8 @@ function build(out) {
       const id = `${type}${l.n}`, [jx, jy] = l.j, r = l.r;
       const up = `<clipPath id="u${id}"><rect x="${f(bx)}" y="${f(by)}" width="${f(bw)}" height="${f(jy - by)}"/><circle cx="${f(jx)}" cy="${f(jy)}" r="${f(r)}"/></clipPath>`;
       const lo = `<clipPath id="l${id}"><rect x="${f(bx)}" y="${f(jy)}" width="${f(bw)}" height="${f(by + bh - jy)}"/><circle cx="${f(jx)}" cy="${f(jy)}" r="${f(r)}"/></clipPath>`;
-      out[`rig_${type}_${l.n}_u`] = svg(bx, by, bw, bh, `<defs>${up}</defs><g clip-path="url(#u${id})">${body}</g>`);
-      out[`rig_${type}_${l.n}_l`] = svg(bx, by, bw, bh, `<defs>${lo}</defs><g clip-path="url(#l${id})">${body}</g>`);
+      out[`rig_${type}_${l.n}_u`] = thin(svg(bx, by, bw, bh, `<defs>${up}</defs><g clip-path="url(#u${id})">${body}</g>`));
+      out[`rig_${type}_${l.n}_l`] = thin(svg(bx, by, bw, bh, `<defs>${lo}</defs><g clip-path="url(#l${id})">${body}</g>`));
       M.layers.push({ n: l.n, at: l.at, arm: !!l.arm, j: l.j, e: l.e });
     }
     meta.rigs[type] = M;

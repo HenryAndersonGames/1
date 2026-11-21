@@ -132,6 +132,16 @@ function enemyPose(e) {
   return pose;
 }
 
+// сглаживание поз существа: суставы догоняют цель, переходы шаг→замах→удар без рывков
+function smoothEnemyPose(e, P) {
+  const k = 1 - Math.exp(-(e.state === 'recover' ? 40 : 18) / 60);
+  const S = e.poseS || (e.poseS = { lean: P.lean, bob: P.bob, L: {} });
+  S.lean += (P.lean - S.lean) * k; S.bob += ((P.bob || 0) - S.bob) * k;
+  if (P.L) for (const n in P.L) { const q = P.L[n], s = S.L[n] || (S.L[n] = [q[0], q[1]]); s[0] += (q[0] - s[0]) * k; s[1] += (q[1] - s[1]) * k; }
+  const out = Object.assign({}, P, { lean: S.lean, bob: S.bob });
+  if (P.L) { out.L = {}; for (const n in P.L) out.L[n] = [S.L[n][0], S.L[n][1]]; }
+  return out;
+}
 // ---------- Отрисовка существа ----------
 function drawEnemyRig(ctx, e) {
   const R = ERIG[e.type], d = EDEF[e.type];
@@ -141,7 +151,7 @@ function drawEnemyRig(ctx, e) {
   if (d.float) y -= 6;
   if (e.state === 'leap') y -= Math.sin((1 - e.t / (e.type === 'wolf' ? 0.34 : 0.42)) * Math.PI) * 30;
   if (e.state === 'cling' && e.host) y = e.host.y - 40 * HERO_SCALE;
-  const pose = enemyPose(e);
+  const pose = smoothEnemyPose(e, enemyPose(e));
   // смерть: падает навзничь, конечности обмякают, потом растворяется
   if (e.state === 'dying') {
     const k = clamp((1.4 - e.t) / 0.45, 0, 1), kk = ease(k);
@@ -154,7 +164,8 @@ function drawEnemyRig(ctx, e) {
   let v = null;
   if (e.frozen > 0) v = 'fz'; else if (e.flash > 0) v = 'fl';
   ctx.save(); ctx.globalAlpha *= alpha; ctx.translate(e.x, y);
-  let sx = flip * ENEMY_SCALE, sy = ENEMY_SCALE;
+  const es = e.type === 'titan' ? 0.72 : ENEMY_SCALE;
+  let sx = flip * es, sy = es;
   // сжатие при ударе
   if (e.hitT > 0 && e.state !== 'cling' && e.state !== 'dying') { const k = e.hitT / 0.18; sx *= 1 + 0.1 * k; sy *= 1 - 0.1 * k; }
   ctx.scale(sx, sy); if (rot) ctx.rotate(rot);

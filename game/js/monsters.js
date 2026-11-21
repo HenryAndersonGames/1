@@ -226,6 +226,8 @@ function updateEnemy(e, dt) {
     }
   }
   e.x += mx * dt; e.y += my * dt;
+  // тяжёлые шаги титана трясут землю
+  if (e.type === 'titan' && (mx || my) && Math.floor(e.anim * 2) !== Math.floor((e.anim + dt * 3) * 2)) { const dp = Math.min(...G.players.map((p) => dist(p.x, p.y, e.x, e.y))); if (dp < 700) { addShake(4 * (1 - dp / 700)); Sfx.play('slam'); } burst(e.x, e.y, 2, 4, '#5a5040', 90, 4, 0.5); }
   if (mx || my || d.float) e.anim += dt * ({ clinger: 10, brute: 4, titan: 3, wolf: 11, ghoul: 10, void: 4 }[e.type] || 7);
   collideWorld(e, e.r, fl);
   // ловушки и огонь

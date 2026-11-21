@@ -1,6 +1,6 @@
 'use strict';
 // ---------- Мир: зоны, здания, препятствия, навигация, столкновения ----------
-const WORLD_W = 4800, WORLD_H = 3600, CELL = 32;
+const WORLD_W = 6400, WORLD_H = 4800, CELL = 32;
 const GW = WORLD_W / CELL, GH = WORLD_H / CELL;
 const WALL_H = 52; // высота стен (как в art/*.svg)
 
@@ -60,6 +60,9 @@ const ZONES = [
   { id: 'industrial', name: 'Промзона', x: 3328, y: 2400, w: 1408, h: 1056 },
   { id: 'farm', name: 'Ферма', x: 192, y: 2432, w: 1760, h: 1024 },
   { id: 'lab', name: 'Лаборатория', x: 192, y: 192, w: 1600, h: 1120 },
+  { id: 'village', name: 'Посёлок', x: 5056, y: 256, w: 1216, h: 1536 },
+  { id: 'depot', name: 'Автобаза', x: 4992, y: 2624, w: 1280, h: 1856 },
+  { id: 'camp', name: 'Заброшенный лагерь', x: 640, y: 3904, w: 1792, h: 704 },
 ];
 function zoneAt(x, y) {
   for (const z of World.zones) if (x >= z.x && x < z.x + z.w && y >= z.y && y < z.y + z.h) return z.id;
@@ -114,7 +117,7 @@ function buildWorld() {
 
   // ===== Дороги =====
   World.roads.push({ x: 2592, y: 320, w: 64, h: 3136, kind: 'dirt' });
-  World.roads.push({ x: 160, y: 2208, w: 4544, h: 64, kind: 'dirt' });
+  World.roads.push({ x: 160, y: 2208, w: 6144, h: 64, kind: 'dirt' });
   World.roads.push({ x: 1088, y: 1280, w: 64, h: 1184, kind: 'dirt' });
   World.roads.push({ x: 3616, y: 2272, w: 64, h: 160, kind: 'dirt' });
   World.floors.push({ x: 2656, y: 768, w: 2080, h: 96, kind: 'asphalt', road: 1 });
@@ -219,6 +222,52 @@ function buildWorld() {
   addProp('sign', 1040, 1220); addProp('sign', 1200, 1220); addProp('sign', 1740, 600);
   for (let i = 0; i < 16; i++) deco(pick(['d_goo', 'd_crack', 'd_oil']), 260 + rng() * 1480, 260 + rng() * 960);
 
+  // ===== Посёлок (восток) =====
+  World.roads.push({ x: 4704, y: 1056, w: 1568, h: 64, kind: 'dirt' });
+  World.roads.push({ x: 5600, y: 320, w: 64, h: 1472, kind: 'dirt' });
+  building(5120, 320, 320, 288, 'wood', 'wood', { s: [D(5248)], e: [Wn(416)] });
+  building(5760, 320, 384, 320, 'brick', 'tile', { s: [D(5920)], w: [Wn(448)] });
+  building(5120, 1216, 352, 288, 'wood', 'wood', { n: [D(5248)], w: [Wn(1312)] });
+  building(5760, 1184, 416, 352, 'barn', 'hay', { n: [D(5920)], e: [D(1312)] });
+  building(5152, 704, 288, 256, 'wood', 'wood', { e: [D(800)], n: [Wn(5248)] });
+  building(5760, 736, 320, 256, 'brick', 'wood', { w: [D(832)] });
+  addFurn('bed', 5150, 360); addFurn('table', 5260, 450); addProp('fridge', 5380, 360); addFurn('sofa', 5300, 520);
+  addProp('shelf', 5800, 370); addProp('shelf', 5900, 370); addProp('counter', 6000, 500); addFurn('crate', 5800, 520);
+  addFurn('bed', 5150, 1260); addFurn('cabinet', 5300, 1260); addProp('locker', 5400, 1400); addFurn('table', 5220, 1380);
+  for (const [x, y] of [[5800, 1240], [5860, 1240], [6080, 1400]]) addProp('hay', x, y);
+  addProp('tractor', 5900, 1600); addFurn('sofa', 5190, 760); addProp('fridge', 5380, 760); addProp('shelf', 5800, 780); addFurn('table', 5900, 860);
+  addProp('car0', 5300, 1120); addProp('car2', 5680, 1700); addProp('well', 5500, 980);
+  for (const y of [420, 760, 1300, 1650]) addProp('lamp', 5560, y, { on: rng() < 0.5 });
+  fenceLine(5056, 1792, 5536, 1792, 'fencewood', [[5280, 5376]]);
+  for (let i = 0; i < 30; i++) deco(pick(['d_leaves0', 'd_puddle', 'd_grass1', 'd_paper']), 5100 + rng() * 1100, 300 + rng() * 1450);
+  // ===== Автобаза (юго-восток): гаражи, машины, бензоколонки =====
+  World.roads.push({ x: 4704, y: 2208, w: 64, h: 2400, kind: 'dirt' });
+  World.floors.push({ x: 4992, y: 2624, w: 1280, h: 1856, kind: 'asphalt' });
+  fenceLine(4992, 2624, 6272, 2624, 'fencechain', [[5440, 5568]]);
+  fenceLine(4992, 2624, 4992, 4480, 'fencechain', [[3200, 3328]]);
+  building(5120, 2752, 640, 384, 'metal', 'concrete', { s: [D(5248), D(5568)], e: [D(2880)] });
+  building(5888, 3392, 320, 448, 'metal', 'concrete', { w: [D(3520)], n: [D(6016)] });
+  building(5120, 3904, 448, 320, 'brick', 'tile', { n: [D(5312)] });
+  addProp('car1', 5180, 2830); addProp('car0', 5420, 2830); addProp('car2', 5200, 3000);
+  for (const [x, y] of [[5200, 3300], [5420, 3320], [5650, 3300], [5300, 3560], [5600, 3600], [6000, 2800], [6080, 3060]]) addProp(pick(['car0', 'car1', 'car2']), x, y);
+  addProp('gaspump', 5700, 2700); addProp('gaspump', 5780, 2700); addProp('gaspump', 5860, 2700);
+  addProp('tractor', 5950, 3950); addProp('container0', 6000, 4250); addProp('container1', 5800, 4250);
+  for (let i = 0; i < 4; i++) addProp('cratestack', 5640 + i * 46, 2780);
+  addProp('locker', 5920, 3420); addProp('shelf', 6000, 3600); addProp('counter', 5180, 3960); addProp('shelf', 5300, 3960); addProp('locker', 5480, 4100);
+  for (const [x, y] of [[5050, 3800], [5076, 3810], [6150, 3300], [5700, 4000]]) addProp('barrel', x, y);
+  for (let i = 0; i < 30; i++) deco(pick(['d_oil', 'd_crack', 'd_oil', 'd_puddle']), 5020 + rng() * 1220, 2660 + rng() * 1800);
+  // ===== Заброшенный лагерь (юг) =====
+  World.roads.push({ x: 1088, y: 3456, w: 64, h: 480, kind: 'dirt' });
+  World.floors.push({ x: 640, y: 3904, w: 1792, h: 704, kind: 'stone' });
+  building(704, 3968, 288, 224, 'wood', 'wood', { e: [D(4032)] });
+  building(1216, 4096, 256, 224, 'wood', 'wood', { n: [D(1312)] });
+  building(1728, 3968, 320, 256, 'ruin', 'stone', { s: [D(1856)] });
+  addFurn('bed', 730, 4000); addFurn('crate', 900, 4100); addFurn('table', 1250, 4200); addProp('locker', 1400, 4130);
+  addProp('cratestack', 1800, 4030); addProp('shelf', 1900, 4030); addFurn('crate', 1760, 4150);
+  addProp('car1', 1500, 3950); addProp('well', 2200, 4300); addProp('bench', 2100, 4450);
+  for (let i = 0; i < 20; i++) deco(pick(['d_leaves0', 'd_grass1', 'd_puddle']), 660 + rng() * 1750, 3920 + rng() * 680);
+  for (const [x, y] of [[5300, 900], [6000, 1000], [5900, 2900], [5400, 3450], [5900, 3700], [5350, 4100], [800, 4300], [1350, 4300], [1900, 4300]]) World.lootSpots.push({ x, y });
+
   // ===== Машины на дорогах =====
   addProp('car0', 1700, 2190); addProp('car2', 2620, 2600); addProp('car1', 4000, 2200);
 
@@ -272,18 +321,18 @@ function buildWorld() {
     World.trees.push(t);
     const k = tkey(x, y); if (!tgrid.has(k)) tgrid.set(k, []); tgrid.get(k).push(t);
   };
-  for (let i = 0; i < 2600 && World.trees.length < 260; i++) {
+  for (let i = 0; i < 4000 && World.trees.length < 380; i++) {
     const side = Math.floor(rng() * 4);
     let x, y;
     if (side === 0) { x = rng() * WORLD_W; y = 20 + rng() * 110; } else if (side === 1) { x = rng() * WORLD_W; y = WORLD_H - 20 - rng() * 100; }
     else if (side === 2) { x = 20 + rng() * 110; y = rng() * WORLD_H; } else { x = WORLD_W - 20 - rng() * 110; y = rng() * WORLD_H; }
     if (okTree(x, y, 62)) plant(x, y, Math.floor(rng() * 3));
   }
-  for (let i = 0; i < 9000 && World.trees.length < 820; i++) {
+  for (let i = 0; i < 16000 && World.trees.length < 1450; i++) {
     const x = 160 + rng() * (WORLD_W - 320), y = 160 + rng() * (WORLD_H - 320);
     if (okTree(x, y, 80)) plant(x, y, rng() < 0.15 ? 3 : Math.floor(rng() * 3));
   }
-  for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < 700; i++) {
     const x = 100 + rng() * (WORLD_W - 200), y = 100 + rng() * (WORLD_H - 200);
     if (okTree(x, y, 40)) World.bushes.push({ x, y, v: Math.floor(rng() * 3) });
   }
