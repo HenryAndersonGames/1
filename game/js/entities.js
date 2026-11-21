@@ -456,22 +456,28 @@ function meleeHit(p) {
     hit++;
   }
   if (M.aoe) { burst(cx, cy, 2, 14, '#5a5040', 220, 4, 0.5); addShake(5); stain(cx, cy, 'rgba(20,16,10,0.3)', M.aoe * 0.5); }
-  // ящики, бочки, запертые двери
+  // постройки, мебель, ящики, двери — всё ломается; баррикады, двери и окна — только тяжёлым ударом
   for (const s of World.structs) {
-    if (s.hp <= 0) continue;
-    const ok = s.kind === 'loot' || (s.kind === 'door' && s.locked && !s.broken && (heavy || W.pry));
+    if (s.hp <= 0 || s.broken || s.carried || s.kind === 'trap') continue;
+    if (s.kind === 'door' && !s.solid) continue;
+    const ok = s.kind === 'loot' || s.kind === 'furn' || heavy || (s.kind === 'door' && W.pry);
     if (!ok) continue;
-    if (distToRect(p.x, p.y, s.x, s.y, s.w, s.h) > reach - 6) continue;
-    const cx = s.x + s.w / 2, cy = s.y + s.h / 2;
-    if (s.kind === 'loot' && wallBetween(p.x, p.y, cx, cy, 14)) continue;
-    if (Math.abs(angDiff(p.face, Math.atan2(cy - p.y, cx - p.x))) > arc + 0.4) continue;
+    const q = nearestOnRect(p.x, p.y, s), dq = dist(p.x, p.y, q.x, q.y);
+    if (dq > reach - 4) continue;
+    if (dq > 6 && Math.abs(angDiff(p.face, Math.atan2(q.y - p.y, q.x - p.x))) > arc + 0.4) continue;
+    if (dq > 6 && wallBetween(p.x, p.y, q.x, q.y, 4)) continue;
     damageStruct(s, s.kind === 'door' ? dmg * (W.pry ? 3 : 1) : dmg); hit++;
   }
   for (const pr of World.props) {
-    if (!pr.explosive || pr.dead || distToRect(p.x, p.y, pr.x, pr.y, pr.w, pr.h) > reach - 6) continue;
-    if (wallBetween(p.x, p.y, pr.x + pr.w / 2, pr.y + pr.h / 2, 16)) continue;
-    damageProp(pr, dmg); hit++;
+    if (pr.dead || pr.hp <= 0 || !pr.solid) continue;
+    const q = nearestOnRect(p.x, p.y, pr), dq = dist(p.x, p.y, q.x, q.y);
+    if (dq > reach - 4) continue;
+    if (dq > 6 && Math.abs(angDiff(p.face, Math.atan2(q.y - p.y, q.x - p.x))) > arc + 0.4) continue;
+    if (dq > 6 && wallBetween(p.x, p.y, q.x, q.y, 4)) continue;
+    damageProp(pr, dmg, p); hit++;
   }
+  // стены: если перед героем стена — долбим её (лёгкие удары слабее, тяжёлые/заряженные — сильнее)
+  if (!hit) hit = hitWall(p, reach, heavy, dmg * (a.charge > 0.25 ? 1.6 : 1));
   // рубим деревья
   if (!hit) for (const t of World.trees) {
     if (Math.abs(t.x - p.x) > 100 || Math.abs(t.y - p.y) > 100) continue;
@@ -856,10 +862,95 @@ function destroyStruct(s) {
   if ((s.kind === 'furn' || s.kind === 'barricade') && Math.random() < 0.6) G.items.push({ cat: 'w', type: Math.random() < 0.25 && s.kind === 'furn' ? 'chair' : 'board', dur: 10, x: s.x + s.w / 2, y: s.y + s.h / 2, held: false, fly: false });
   for (const p of G.players) if (p.held && p.held.ref === s) p.held = null;
 }
-function damageProp(pr, dmg) {
-  if (!pr.explosive || pr.dead || pr.fuse) return;
-  pr.hp -= dmg; pr.flash = 0.1;
-  if (pr.hp <= 0) { pr.fuse = 0.35; Sfx.play('hiss'); }
+function damageProp(pr, dmg, by) {
+  if (pr.dead) return;
+  if (pr.explosive) {
+    if (pr.fuse) return;
+    pr.hp -= dmg; pr.flash = 0.1;
+    if (pr.hp <= 0) { pr.fuse = 0.35; Sfx.play('hiss'); }
+    return;
+  }
+  if (pr.hp <= 0) return;
+  pr.hp -= dmg; pr.flash = 0.12;
+  const metal = PROP_METAL.has(pr.spr);
+  burst(pr.x + pr.w / 2, pr.y + pr.h / 2, 26, metal ? 5 : 4, metal ? '#9aa0a0' : '#7a5c3a', 140, 3);
+  if (metal) spark(pr.x + pr.w / 2, pr.y, 6);
+  Sfx.play(metal ? 'clang' : 'wood');
+  if (pr.hp > 0) {
+    if (!pr.warned && by) { pr.warned = 1; floatText(pr.x + pr.w / 2, pr.y - 40, 'Ломается…', '#e8d8b0', 13); }
+    return;
+  }
+  // предмет разбит — проход свободен
+  pr.dead = true; pr.solid = false;
+  const cx = pr.x + pr.w / 2, cy = pr.y + pr.h / 2;
+  burst(cx, cy, 30, 22, metal ? '#7d8484' : '#7a5c3a', 220, 4, 0.8);
+  stain(cx, cy + pr.h / 2, metal ? 'rgba(60,64,66,0.35)' : 'rgba(70,52,34,0.35)', Math.max(pr.w, pr.h) * 0.55);
+  Sfx.play('break'); addShake(metal ? 6 : 4);
+  if (pr.search && !pr.searched) { const n = randi(1, 2); for (let i = 0; i < n; i++) dropFromLoot(rollLoot(pr.zone), cx, cy); }
+  if (metal) dropPickup('scrap', cx, cy); else if (Math.random() < 0.6) dropPickup('wood', cx, cy);
+  buildStaticGrid(); G.flowDirty = true;
+}
+function spark(x, y, n) {
+  if (!G.sparks) return;
+  const big = n > 3;
+  G.sparks.push({ x: x + rand(-4, 4), y: y + rand(-4, 4), t: big ? 0.18 : 0.12, max: big ? 0.18 : 0.12, r: big ? 22 : 14, a: rand(0, 1) });
+  for (let k = 0; k < n; k++) part(x, y, 30, rand(-200, 200), rand(-200, 200), rand(60, 200), 0.3, '#ffd870', 2, 500);
+}
+function nearestOnRect(x, y, r) { return { x: clamp(x, r.x, r.x + r.w), y: clamp(y, r.y, r.y + r.h) }; }
+
+// ----- Разрушаемые стены: долгими ударами можно пробить проход -----
+const WALL_HP = { wood: 150, ruin: 90, brick: 280, metal: 340, concrete: 320, barn: 150, fencewood: 60, fencechain: 90, fencebarb: 70 };
+function wallAtPoint(x, y) {
+  let w = null;
+  sgQuery(SG.cells, x - 1, y - 1, x + 1, y + 1, (e) => { if (e.t === 0 && e.ref.style && x >= e.x && x <= e.x + e.w && y >= e.y && y <= e.y + e.h) { w = e.ref; return false; } });
+  return w;
+}
+function hitWall(p, reach, heavy, dmg) {
+  const dx = Math.cos(p.face), dy = Math.sin(p.face);
+  for (let d = p.r; d <= reach + 4; d += 4) {
+    const x = p.x + dx * d, y = p.y + dy * d, w = wallAtPoint(x, y);
+    if (!w) { if (pointBlocked(x, y)) return 0; continue; }
+    const horiz = w.w >= w.h, along = horiz ? x - w.x : y - w.y, ci = Math.floor(along / 32);
+    const max = WALL_HP[w.style] || 200;
+    w.dmg = w.dmg || {}; w.flash = 0.1;
+    w.dmg[ci] = (w.dmg[ci] || 0) + dmg * (heavy ? 1 : 0.35);
+    const fence = (w.style || '').startsWith('fence');
+    burst(x, y, fence ? 14 : 30, heavy ? 10 : 5, WALL_DUST[w.style] || '#8a7a66', heavy ? 200 : 130, 3.5, 0.55);
+    if (!fence || w.style === 'fencechain') spark(x, y - 20, heavy ? 5 : 2);
+    Sfx.play(w.style === 'metal' || w.style === 'fencechain' ? 'clang' : heavy ? 'hitH' : 'wood');
+    if (!w.warned) { w.warned = 1; floatText(x, y - 70, heavy ? 'Стена трещит!' : 'Стена поддаётся… бей тяжёлым (Y)', '#e8d8b0', 14); }
+    if (w.dmg[ci] >= max) breakWall(w, horiz ? x : y, horiz);
+    return 1;
+  }
+  return 0;
+}
+const WALL_DUST = { wood: '#8a6a44', barn: '#8a4a34', brick: '#9a5a44', ruin: '#8a7a66', concrete: '#9a968c', metal: '#7d8484', fencewood: '#8a6a44', fencechain: '#7d8484', fencebarb: '#6a5a44' };
+function breakWall(w, c, horiz) {
+  const GAP = 64, start = horiz ? w.x : w.y, len = horiz ? w.w : w.h;
+  let a = clamp(c - GAP / 2, start, start + len - GAP), b = a + GAP;
+  if (a - start < 20) a = start;           // огрызки стен не оставляем
+  if (start + len - b < 20) b = start + len;
+  const k = World.walls.indexOf(w);
+  if (k < 0) return;
+  World.walls.splice(k, 1);
+  const piece = (p0, p1, shift) => {
+    if (p1 - p0 <= 0) return;
+    const n = horiz ? { x: p0, y: w.y, w: p1 - p0, h: w.h, style: w.style } : { x: w.x, y: p0, w: w.w, h: p1 - p0, style: w.style };
+    // переносим накопленные трещины на оставшиеся куски
+    if (w.dmg) { n.dmg = {}; for (const ci in w.dmg) { const g = start + ci * 32 + 16; if (g >= p0 && g < p1) n.dmg[Math.floor((g - p0) / 32)] = w.dmg[ci]; } }
+    World.walls.push(n);
+  };
+  piece(start, a); piece(b, start + len);
+  const fence = (w.style || '').startsWith('fence');
+  const gx = horiz ? (a + b) / 2 : w.x + w.w / 2, gy = horiz ? w.y + w.h / 2 : (a + b) / 2;
+  burst(gx, gy, 40, fence ? 16 : 34, WALL_DUST[w.style] || '#8a7a66', 260, 5, 1);
+  for (let i = 0; i < (fence ? 3 : 8); i++) burst(gx + rand(-24, 24), gy + rand(-24, 24), rand(10, 60), 2, '#2a2420', 160, 6, 0.9);
+  stain(gx, gy + 6, 'rgba(40,34,28,0.45)', 40);
+  (G.rubble || (G.rubble = [])).push({ x: gx, y: gy, horiz, style: w.style, len: b - a, seed: Math.random() * 1000 });
+  Sfx.play('break'); addShake(fence ? 4 : 10);
+  if (!fence && Math.random() < 0.7) G.items.push({ cat: 't', kind: 'brick', x: gx + rand(-20, 20), y: gy + rand(-20, 20), held: false, fly: false });
+  msg(fence ? 'Забор проломлен' : 'Стена проломлена — путь свободен (и для монстров тоже!)', '#e8c890');
+  buildStaticGrid(); G.flowDirty = true;
 }
 
 // ===== Предметы =====

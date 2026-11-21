@@ -67,6 +67,7 @@ const Sfx = (() => {
       case 'hitH': if (rate(n, 40)) { tone(90, 0.16, 'square', 0.24, -50); hiss(0.12, 0.3, 500); } break;
       case 'shot': hiss(0.12, 0.45, 1800, 0.5); tone(160, 0.08, 'square', 0.2, -100); break;
       case 'shotgun': hiss(0.25, 0.55, 900, 0.4); tone(80, 0.18, 'square', 0.3, -40); break;
+      case 'clang': if (rate(n, 45)) { tone(620, 0.12, 'square', 0.1, -200); tone(1240, 0.08, 'triangle', 0.06); hiss(0.08, 0.2, 2600); } break;
       case 'click': tone(1200, 0.03, 'square', 0.06); break;
       case 'explode': hiss(0.8, 0.6, 180, 0.4); tone(45, 0.7, 'sawtooth', 0.35, -20); break;
       case 'hiss': hiss(0.4, 0.15, 3000, 1); break;

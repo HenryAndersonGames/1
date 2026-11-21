@@ -39,10 +39,15 @@ const PROPS = {
   generator: { w: 48, h: 32 }, flood: { w: 8, h: 8, cx: true }, cratestack: { w: 40, h: 36, search: 1 }, locker: { w: 28, h: 20, search: 1, tall: 54 },
   bench: { w: 64, h: 30, bench: 1 }, car0: { w: 112, h: 50, car: 1, search: 1 }, car1: { w: 112, h: 50, car: 1, search: 1 }, car2: { w: 112, h: 50, car: 1, search: 1 },
 };
+// прочность предметов: всё, что мешает пройти, можно разбить (генератор и прожекторы базы — нет)
+const PROP_HP = { bin: 40, barrel2: 60, pallets: 50, container0: 700, container1: 700, shelf: 110, fridge: 140, counter: 110, gaspump: 160, hay: 40,
+  scarecrow: 30, tractor: 480, well: 320, labtable: 110, capsule: 140, capsule_broken: 90, rack: 100, cratestack: 80, locker: 110, bench: 70, car0: 420, car1: 420, car2: 420, lamp: 60 };
+const PROP_METAL = new Set(['bin', 'barrel2', 'container0', 'container1', 'fridge', 'gaspump', 'tractor', 'capsule', 'capsule_broken', 'rack', 'locker', 'car0', 'car1', 'car2', 'lamp']);
 function addProp(spr, x, y, o = {}) {
   const d = PROPS[spr];
   const p = Object.assign({ spr, x, y, w: d.w, h: d.h, solid: !d.nosolid, low: !!d.low, cx: !!d.cx, search: !!d.search, explosive: !!d.explosive,
-    hide: !!d.hide, tall: d.tall || 0, car: !!d.car, bench: !!d.bench, hp: d.explosive ? 20 : 0, searched: 0 }, o);
+    hide: !!d.hide, tall: d.tall || 0, car: !!d.car, bench: !!d.bench, hp: d.explosive ? 20 : (PROP_HP[spr] || 0), searched: 0 }, o);
+  p.maxHp = p.hp;
   if (p.cx) { p.x = x - p.w / 2; p.y = y - p.h / 2; p.ox = x; p.oy = y; }
   p.zone = zoneAt(x, y);
   World.props.push(p);
@@ -341,7 +346,30 @@ function eachCell(s, fn) {
 function dijkstra(C, D, targets) {
   const B = Nav.blocked, H = Nav.heap; H.clear();
   D.fill(Infinity);
-  for (const t of targets) { const i = cellOf(t.x, t.y); if (D[i] > 0) { D[i] = 0; H.push(0, i); } }
+  for (const t of targets) {
+    let i = cellOf(t.x, t.y);
+    // игрок прижат к стене и его клетка «занята» стеной — берём ближайшую свободную клетку С ЕГО СТОРОНЫ,
+    // иначе волна расходилась бы сквозь стену и монстры ломились бы в стену, а не в дверь
+    if (B[i]) {
+      let bj = -1, bd = Infinity;
+      const gx = i % GW, gy = (i / GW) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = gx + dx, ny = gy + dy;
+        if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+        const j = ny * GW + nx;
+        if (B[j]) continue;
+        const cx = nx * CELL + CELL / 2, cy = ny * CELL + CELL / 2;
+        let wall = false;
+        for (let k = 1; k <= 4 && !wall; k++) wall = pointBlocked(t.x + (cx - t.x) * k / 4, t.y + (cy - t.y) * k / 4);
+        if (wall) continue;
+        const dd = dist2(t.x, t.y, cx, cy);
+        if (dd < bd) { bd = dd; bj = j; }
+      }
+      if (bj < 0) continue;
+      i = bj;
+    }
+    if (D[i] > 0) { D[i] = 0; H.push(0, i); }
+  }
   while (H.size) {
     const i = H.pop(), d = D[i], gx = i % GW, gy = (i / GW) | 0;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {

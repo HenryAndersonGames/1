@@ -163,12 +163,15 @@ function updateEnemy(e, dt) {
       const dp = dist(e.x, e.y, p.x, p.y);
       if (!e.aggro) {
         const sense = !night ? 150 : e.type === 'spider' ? 150 : e.type === 'wolf' ? 500 : 360;
-        if (dp < sense) { e.aggro = true; Sfx.play(e.type === 'wolf' ? 'howl' : 'growl'); }
+        if (dp < sense && (dp < 80 || !wallBetween(e.x, e.y, p.x, p.y, p.r))) { e.aggro = true; Sfx.play(e.type === 'wolf' ? 'howl' : 'growl'); }
         else { wander(e, dt); mx = Math.cos(e.wanderA) * spd * 0.35; my = Math.sin(e.wanderA) * spd * 0.35; if (e.type === 'spider' || e.type === 'void') { mx *= 0.3; my *= 0.3; } break; }
       }
       // днём монстр бросает погоню, если игрок отошёл, и не подходит к базе
       if (!night && !e.night && (dp > 420 || dist(e.x, e.y, World.fire.x, World.fire.y) < 520)) { e.aggro = false; e.wanderA = Math.atan2(e.home.y - e.y, e.home.x - e.x); e.wanderT = 3; break; }
-      const los = dp < 320 && lineClear(e.x, e.y, p.x, p.y);
+      // прямая видимость: стены и закрытые двери загораживают; результат кэшируется (слабые ПК)
+      e.losT = (e.losT || 0) - dt;
+      if (e.losT <= 0 || e.losP !== p) { e.losT = 0.12; e.losP = p; e.los = dp < 320 && (lineClear(e.x, e.y, p.x, p.y) || (dp < 110 && !wallBetween(e.x, e.y, p.x, p.y, p.r))); }
+      const los = e.los;
       // ---- особые приёмы ----
       if (e.type === 'clinger' && dp < e.r + p.r + 14 && e.cd <= 0 && p.state !== 'roll' && p.clingers.length < 3) {
         e.state = 'cling'; e.host = p; e.cA = rand(0, TAU); e.tick = 0.6; p.clingers.push(e); p.shake = 0;
@@ -195,14 +198,14 @@ function updateEnemy(e, dt) {
         break;
       }
       const melee = e.type !== 'clinger' && e.type !== 'void' && e.type !== 'spider' ? true : e.type === 'spider';
-      if (melee && dp < d.range + p.r && e.cd <= 0) {
+      if (melee && dp < d.range + p.r && e.cd <= 0 && (los || !wallBetween(e.x, e.y, p.x, p.y, p.r))) {
         e.state = 'wind'; e.t = d.wind; e.tgt = p; e.tgtS = null; e.shot = null; e.face = Math.atan2(p.y - e.y, p.x - e.x);
         break;
       }
       // ---- движение ----
       let tx, ty;
       if (e.type === 'void' && dp < 220) { const a = Math.atan2(e.y - p.y, e.x - p.x); tx = e.x + Math.cos(a) * 60; ty = e.y + Math.sin(a) * 60; }
-      else if (los || dp < 50) { tx = p.x; ty = p.y; }
+      else if (los) { tx = p.x; ty = p.y; }
       else {
         const st = flowStep(e.x, e.y, d.squeeze);
         if (st) {
@@ -212,7 +215,8 @@ function updateEnemy(e, dt) {
             e.face = Math.atan2(st.s.y + st.s.h / 2 - e.y, st.s.x + st.s.w / 2 - e.x);
             break;
           }
-        } else { tx = p.x; ty = p.y; }
+        } else if ((d.squeeze ? Nav.distG : Nav.dist)[cellOf(e.x, e.y)] < Infinity) { tx = p.x; ty = p.y; }
+        else { wander(e, dt); tx = e.x + Math.cos(e.wanderA) * 40; ty = e.y + Math.sin(e.wanderA) * 40; }
       }
       const a = Math.atan2(ty - e.y, tx - e.x);
       e.face = e.type === 'void' ? Math.atan2(p.y - e.y, p.x - e.x) : a;

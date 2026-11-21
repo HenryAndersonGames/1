@@ -9,7 +9,7 @@ function controlsHelp() {
     `#Геймпадов подключено: ${pads} ${pads < 2 ? '(нажмите любую кнопку на геймпаде, чтобы он определился)' : ''}`,
     'Левый стик — движение · Правый стик — направление · X — лёгкая атака · Y — тяжёлая · B — перекат · A — действие / поднять / обыскать',
     'Комбо: X-X-X, X-Y (выпад), X-X-Y (добивание), Y-Y (удар сверху), перекат+X / перекат+Y · LB / RB / RT — особые способности',
-    'Y держать — замах с зарядом, отпустить — удар · B — прыжок-уклонение · держи A — взять оружие · ▲ — сменить оружие · LT — бинт · ◀ баррикада, ▶ ловушка, ▼ поесть · Back — навыки и способности · Start — пауза',
+    'Y держать — замах с зарядом, отпустить — удар · B — прыжок-уклонение · держи A — взять оружие · ▲ — сменить оружие · LT — бинт · ◀ баррикада, ▶ ловушка, ▼ поесть · Back — навыки и способности · Start — пауза (там же «Вернуться к костру», если застряли, и «Начать заново»)',
     'Перекат в момент удара — идеальный уворот и контратака ×2 · с Силой 3 можно схватить оглушённого монстра (A) и швырнуть',
     '',
     '#Клавиатура (если геймпада нет)',
@@ -20,7 +20,73 @@ function controlsHelp() {
     'Днём исследуйте город, промзону, ферму и лабораторию: обыскивайте шкафы, ищите оружие, топливо и ткань.',
     'Ночью держите оборону у дома: двери, баррикады, мебель, ловушки, генератор с прожекторами.',
     'Упавшего напарника поднимайте, удерживая A рядом. Если упадут оба — забег окончен.',
+    'Ломается всё: мебель и шкафы — любыми ударами, двери и баррикады — тяжёлыми, стены — долгой серией тяжёлых (Y).',
   ];
+}
+
+// ---------- Меню паузы: продолжить / вернуться к костру (если застрял) / заново / управление ----------
+const PAUSE_ITEMS = [
+  ['Продолжить', 'вернуться в игру'],
+  ['Вернуться к костру', 'если застряли — оба героя переносятся к костру'],
+  ['Начать заново', 'новый забег с первого дня'],
+  ['Управление', 'кнопки и советы'],
+];
+function pauseMenu() {
+  const pm = G.pm || (G.pm = { sel: 0, help: false, confirm: false });
+  for (const c of Input.ctrls) {
+    const P = c.pressed;
+    if (pm.help) { if (P.roll || P.light || P.interact || P.start || P.menu) { pm.help = false; Sfx.play('menu'); } continue; }
+    if (P.start || P.roll) {
+      if (pm.confirm) { pm.confirm = false; Sfx.play('menu'); continue; }
+      G.paused = false; return;
+    }
+    if (P.up) { pm.sel = (pm.sel + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length; pm.confirm = false; Sfx.play('menu'); }
+    if (P.down) { pm.sel = (pm.sel + 1) % PAUSE_ITEMS.length; pm.confirm = false; Sfx.play('menu'); }
+    if (P.light || P.interact) {
+      Sfx.play('menu');
+      if (pm.sel === 0) { G.paused = false; return; }
+      if (pm.sel === 1) { returnToFire(); G.paused = false; return; }
+      if (pm.sel === 2) {
+        if (!pm.confirm) { pm.confirm = true; continue; }
+        pm.confirm = false; pm.sel = 0; newGame(); G.paused = false; return;
+      }
+      if (pm.sel === 3) pm.help = true;
+    }
+  }
+}
+function returnToFire() {
+  const f = World.fire;
+  G.players.forEach((p, i) => {
+    if (p.state === 'dead') return;
+    if (p.held) dropHeld(p, true);
+    for (let k = 0; k < 24; k++) {
+      const a = (i ? 0.3 : Math.PI - 0.3) + k * 0.7, r = f.r + 40 + k * 6;
+      const x = f.x + Math.cos(a) * r, y = f.y + Math.sin(a) * r;
+      if (freeSpot(x, y, p.r) && !Nav.blocked[cellOf(x, y)]) { p.x = x; p.y = y; break; }
+    }
+    if (p.state !== 'downed') { p.state = 'normal'; p.atk = null; }
+    p.vx = p.vy = 0; p.buf = {};
+    for (const e of p.clingers || []) { e.state = 'move'; e.host = null; e.stun = 1; }
+    if (p.clingers) p.clingers.length = 0;
+    burst(p.x, p.y, 30, 14, '#e8a03c', 140, 3);
+  });
+  G.cam.x = f.x; G.cam.y = f.y - 80;
+  G.flowDirty = true;
+  msg('Вы вернулись к костру', '#e8c890');
+}
+function drawPause() {
+  const pm = G.pm || { sel: 0 };
+  if (pm.help) { drawScreen('Управление', controlsHelp().concat(['', '#B / Start — назад']), `День ${G.day}`); return; }
+  const lines = [];
+  PAUSE_ITEMS.forEach(([name, note], i) => {
+    const on = i === pm.sel;
+    if (on && i === 2 && pm.confirm) lines.push('#▶  Точно начать заново? Нажмите A ещё раз  ◀');
+    else lines.push((on ? '#▶  ' : '') + name + (on ? '  ◀' : ''));
+    lines.push(on ? note : ' ');
+  });
+  lines.push('', 'Стик / крестовина — выбор · A или X — выбрать · B / Start — продолжить');
+  lines.push('Клавиатура: W/S или ↑/↓ — выбор · E или J — выбрать · Esc — продолжить');
+  drawScreen('Пауза', lines, `День ${G.day} · ${G.phase === 'night' ? 'ночь' : 'день'}`);
 }
 
 function frame(t) {
@@ -56,9 +122,10 @@ function frame(t) {
     return;
   }
   if (G.paused) {
-    if (Input.anyPressed('start')) G.paused = false;
+    pauseMenu();
+    if (G.state !== 'play') return;
     render();
-    drawScreen('Пауза', controlsHelp().concat(['', '#Start / Enter — продолжить']), `День ${G.day}`);
+    drawPause();
     return;
   }
   acc += dt;
@@ -87,5 +154,6 @@ window.addEventListener('load', async () => {
   };
   loading(0);
   await initArt(loading);
+  await initPuppet();
   requestAnimationFrame((t) => { lastT = t; frame(t); });
 });

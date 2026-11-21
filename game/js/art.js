@@ -5,8 +5,8 @@ const OL = '#1a110b';
 const SS = 2;
 const Art = { ready: false };
 const PAL = [
-  { accent: '#e8a03c', coatD: '#4b331e', name: 'Игрок 1' },
-  { accent: '#59c7b8', coatD: '#20333c', name: 'Игрок 2' },
+  { accent: '#5fc0cf', coatD: '#2f5a64', name: 'Игрок 1' },
+  { accent: '#f0c040', coatD: '#8a6a18', name: 'Игрок 2' },
 ];
 const ETYPES = ['walker', 'jumper', 'clinger', 'brute', 'ghoul', 'wolf', 'spider', 'void', 'titan'];
 // Глаза для свечения в темноте (лицом вправо)
@@ -62,6 +62,8 @@ async function initArt(onProgress) {
     for (const k of Object.keys(A)) if (k.startsWith(`p${i}_`)) P[k.slice(3)] = A[k];
     P.walk = [0, 1, 2, 3, 4, 5].map((k) => A[`p${i}_walk${k}`]);
     P.carry = [0, 1, 2, 3].map((k) => A[`p${i}_carry${k}`]);
+    P.fwalk = [0, 1, 2, 3].map((k) => A[`p${i}_fwalk${k}`]);
+    P.bwalk = [0, 1, 2, 3].map((k) => A[`p${i}_bwalk${k}`]);
     return P;
   });
   Art.enemy = {};

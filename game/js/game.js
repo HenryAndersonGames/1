@@ -24,7 +24,7 @@ function newGame() {
   G.team = { wood: 4, scrap: 2, cloth: 1, fuel: 1, ammo: 0, band: 1, food: 2 };
   G.players = [makePlayer(0, f.x - 50, f.y - 50), makePlayer(1, f.x + 50, f.y - 50)];
   G.players[1].weapon = { type: 'pipe', dur: WEAPONS.pipe.durab };
-  for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies', 'bombs', 'sparks', 'dmgNums']) G[k] = [];
+  for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies', 'bombs', 'sparks', 'dmgNums', 'rubble']) G[k] = [];
   G.cam.x = f.x; G.cam.y = f.y - 80; G.cam.zoom = 1;
   G.flowDirty = true;
   // подручные предметы и находки

@@ -4,82 +4,98 @@
 const L = require('./lib');
 const { INK, smooth, shape, line, g, dot, ell, dark, light, svg, rect, poly, f } = L;
 
-const LINE = '#2a1f1a';
+const LINE = '#262028';
+// Герой по референсу (видео-разворот): лысый, очки-гогглы на лбу, длинное пальто с воротником-стойкой,
+// серая водолазка, широкие фиолетовые брюки, розовые ботинки. Тонкий ровный контур, плоский цвет.
 const PAL = [
-  // Вера: горчичный дождевик, рыжие косы, оливковые брюки, высокие сапоги
-  { coat: '#c99a3a', coat2: '#a87a26', scarf: '#c0532e', pants: '#5d6340', boot: '#5a3a26', hair: '#a8492a', skin: '#e9c9a4' },
-  // Лёва: шапка-ушанка, свитер с ромбами, тёмные брюки, светлые кеды
-  { coat: '#5b7c7a', coat2: '#3e5a58', scarf: '#4fb3a4', pants: '#3a3a44', boot: '#d9d2c0', hair: '#6a4026', hat: '#8a3f36', skin: '#f0d6b8' },
+  { skin: '#f4a674', coat: '#4f8794', shirt: '#d9d9d4', pants: '#5f5078', shoe: '#ec7189', gog: '#4a4c58' },
+  { skin: '#5b5c63', coat: '#e3b23a', shirt: '#d9d9d4', pants: '#5f5078', shoe: '#ec7189', gog: '#3a3c46' },
 ];
-// Плоские формы с тонким контуром (без штриховки и тяжёлой тени)
-const F = (d, fill, o = {}) => shape(d, fill, Object.assign({ sw: 0.75, nodrop: true, flat: true }, o));
-const Fs = (d, fill, o = {}) => shape(d, fill, Object.assign({ sw: 0.75, nodrop: true, sh: [2.2, 1.6], nolight: true, nohatch: true, dk: 0.16 }, o));
-const thin = (d, w = 0.6, col = LINE, op = 1) => line(d, w, col, op);
+const F = (d, fill, o = {}) => shape(d, fill, Object.assign({ sw: 0.8, nodrop: true, flat: true }, o));
+const thin = (d, w = 0.7, col = LINE, op = 1) => line(d, w, col, op);
+const dk = (c, k = 0.12) => dark(c, k);
+const RIG = { hipY: -40, shoulder: [1, -31], armLen: 29 };
 
-// Риг: бедро на высоте 44, плечо на 29 выше бедра, рука 27
-const RIG = { hipY: -44, shoulder: [3, -29], armLen: 26 };
+// ---------- Вид сбоку (лицом вправо) ----------
+function leg(c, back) {
+  const pc = back ? dk(c.pants, 0.18) : c.pants, sc = back ? dk(c.shoe, 0.15) : c.shoe;
+  let s = F(poly([[-4.6, -2], [4.4, -2], [4.2, 34.5], [-4.6, 34.5]]), pc) + thin('M0 4L0.4 30', 0.5, '#000', 0.25);
+  s += F(smooth([[-5, 33, 1], [4.4, 33, 1], [5.2, 35.4], [9.4, 37.2], [10, 40.2, 1], [-5.4, 40.2, 1], [-5.8, 37]]), sc);
+  return s;
+}
+function arm(c, back) {
+  const cc = back ? dk(c.coat, 0.16) : c.coat, sk = back ? dk(c.skin, 0.12) : c.skin;
+  let s = F(poly([[-3.4, -2.5], [3.6, -2.5], [4.3, 23], [-4, 23]]), cc) + thin('M-3.6 20.5L4 20.5', 0.6);
+  s += F(smooth([[-2.4, 22.6], [2.8, 22.6], [3.4, 27], [2, 30.4], [-0.6, 30.6], [-2.6, 27.6]]), sk) + thin('M2.6 25L4.4 26.4L3 28', 0.6);
+  return s;
+}
+function torso(c) {
+  let s = F(rect(-2.4, -35, 5, 6), c.skin);
+  // воротник-стойка за шеей
+  s += F(smooth([[-7, -31, 1], [-8.4, -38.4, 1], [-3.6, -34.6], [-1, -31]]), dk(c.coat, 0.1));
+  // пальто
+  s += F(smooth([[-6.4, -31, 1], [-8.4, -22], [-10.4, -2], [-11.6, 11, 1], [9.6, 11, 1], [8.6, -6], [7.4, -22], [5.8, -31, 1]]), c.coat,
+    { inner: thin('M-9.6 3L-10.8 10.6M-3 -6L-3.4 10.8', 0.55, '#000', 0.3) });
+  // водолазка в распахе и лацкан
+  s += F(poly([[2.6, -31], [6.6, -30.6], [7.4, -7], [3.6, -6]]), c.shirt);
+  s += F(smooth([[1.8, -31, 1], [5.2, -26], [3.4, -15], [5.8, -6, 1], [8.4, -6, 1], [7.6, -24], [6.4, -31, 1]]), dk(c.coat, 0.06));
+  s += F(smooth([[2.6, -31], [5, -37.4, 1], [6.8, -31]]), c.coat);
+  return s;
+}
+function headSide(c) {
+  let s = F(ell(2.2, -15.5, 14.4, 14.4), c.skin);
+  s += thin('M-12 -22.2Q2 -26 16.2 -22.4', 4.6, LINE) + thin('M-12 -22.2Q2 -26 16.2 -22.4', 3, c.gog);
+  s += F(rect(12.4, -27.4, 4.6, 9.6), dk(c.gog, 0.1), { sw: 0.7 }) + F(ell(17.8, -22.6, 2.6, 4.6), '#2c3644', { sw: 0.7 }) + dot(18.4, -24.4, 0.9, '#b8c8d8');
+  s += dot(10.4, -13.6, 1.25, LINE) + thin('M10.2 -8.6Q12.4 -7 14.2 -9', 0.75);
+  return s;
+}
 
-function leg(c, dk, i) {
-  const pc = dk ? dark(c.pants, 0.22) : c.pants, bc = dk ? dark(c.boot, 0.2) : c.boot;
-  let s = Fs(poly([[-2.4, -1], [2.4, -1], [2.1, 40], [-2.1, 40]]), pc);
-  if (i === 0) s += Fs(smooth([[-2.6, 26, 1], [2.6, 26, 1], [2.6, 40.5], [6.4, 42], [6.8, 44.4, 1], [-2.8, 44.4, 1], [-2.9, 40]]), bc) + thin('M-2.6 28.6L2.6 28.6', 0.5, '#000', 0.35);
-  else s += Fs(smooth([[-2.4, 39.6, 1], [2.4, 39.6, 1], [5, 41], [6.6, 43], [6.2, 44.6, 1], [-2.6, 44.6, 1], [-2.8, 42]]), bc) + thin('M-2.6 43.4L6.2 43.4', 0.6, '#7a6a5a') + thin('M0 40.6L1.4 41.6', 0.5, '#7a6a5a');
-  return s;
-}
-function arm(c, dk) {
-  const cc = dk ? dark(c.coat, 0.22) : c.coat, sk = dk ? dark(c.skin, 0.2) : c.skin;
-  let s = Fs(poly([[-2, -1.6], [2, -1.6], [1.9, 23], [-1.9, 23]]), cc);
-  s += F(rect(-2.2, 21.6, 4.4, 2.6), dark(cc, 0.15));
-  s += F(ell(0.1, 26.4, 2.3, 2.6), sk);
-  return s;
-}
-function torso(c, i) {
-  let s = F(rect(-1.3, -35, 2.6, 6), c.skin);
-  if (i === 0) {
-    s += Fs(smooth([[-5.6, -30, 1], [5.6, -30, 1], [7.2, -18], [10.4, 10, 1], [5, 11.4], [0, 10.4], [-5, 11.4], [-10.4, 10, 1], [-7.2, -18]]), c.coat, {
-      inner: thin('M1.4 -29L2.6 10.6', 0.6) + dot(4, -22, 0.8, LINE) + dot(4.6, -14, 0.8, LINE) + dot(5.2, -6, 0.8, LINE) +
-        thin('M-7.4 -4L-2 -4L-2 1L-7.8 1Z', 0.55) + thin('M-10 9Q0 7 10 9', 0.5, '#000', 0.25) });
-    s += Fs(smooth([[-5.8, -30], [0, -27.4], [5.8, -30], [5.6, -33.2], [0, -30.8], [-5.6, -33.2]]), c.scarf, { inner: thin('M-3 -32.6L-2.6 -28.6M1 -31L1.2 -27.6M4 -32.4L3.6 -28.8', 0.7, dark(c.scarf, 0.3)) });
-    s += Fs(smooth([[-4.4, -29.4], [-7.6, -22], [-9.6, -15, 1], [-6.6, -15.4, 1], [-4.6, -22]]), c.scarf);
-  } else {
-    let dia = ''; for (let k = -6; k <= 6; k += 4) dia += `M${k} -16L${k + 2} -13L${k} -10L${k - 2} -13Z`;
-    s += Fs(smooth([[-5.8, -30, 1], [5.8, -30, 1], [7, -14], [7.6, 4, 1], [-7.6, 4, 1], [-7, -14]]), c.coat, {
-      inner: thin(dia, 0.6, '#d9d2c0', 0.9) + thin('M-7 -6L7 -6M-7.4 0L7.4 0', 0.9, dark(c.coat, 0.25)) });
-    s += Fs(smooth([[-6, -30], [0, -27], [6, -30], [5.8, -33.6], [0, -31], [-5.8, -33.6]]), c.scarf);
-    s += Fs(smooth([[4, -29.4], [6.6, -20], [8.4, -14, 1], [5.6, -14.6, 1], [3.6, -22]]), c.scarf, { inner: thin('M5 -19L7.4 -18.4', 0.6, dark(c.scarf, 0.3)) });
-  }
-  return s;
-}
-function eyes(cx, cy) {
+// ---------- Вид спереди и со спины ----------
+function viewFB(c, back, ph, moving) {
+  const st = moving ? Math.sin(ph) : 0, bob = moving ? -Math.abs(Math.cos(ph)) * 1.6 : 0;
+  const lift = (k) => Math.max(0, k) * 4;
   let s = '';
-  for (const [x, r] of [[cx, 2.3], [cx + 4.3, 2.15]]) s += F(ell(x, cy, r, r * 1.08), '#fbf6ea', { sw: 0.55 }) + dot(x + 0.7, cy + 0.2, r * 0.5, LINE);
-  return s;
-}
-function head(c, i) {
-  let s = '';
-  if (i === 0) {
-    s += Fs(smooth([[-7, -8], [-9.6, 2], [-9, 10], [-7, 16, 1], [-5, 10], [-5.6, 2], [-4.6, -6]]), c.hair, { inner: thin('M-9 2L-5.6 3M-8.8 7L-5.4 8M-8 12L-5.6 12.6', 0.55) });
-    s += F(ell(-7, 17, 1.8, 1.4), c.scarf);
-    s += Fs(smooth([[-9.2, -9], [-9.6, -16], [-5, -21.4], [3, -22], [9.4, -17], [10.4, -10], [8, -12], [-2, -13], [-7, -6]]), c.hair);
-    s += Fs(ell(1.2, -10.4, 8.6, 9.6), c.skin);
-    s += Fs(smooth([[-7, -14, 1], [-5.4, -19.4], [2, -21.2], [8.8, -17.6], [10, -13.2, 1], [6, -12.6, 1], [2, -13, 1], [-2, -12.8, 1], [-5.6, -13.4, 1]]), c.hair);
-    s += eyes(1.8, -9.2);
-    s += thin('M10 -6.6L10.8 -5.2L9.8 -4.8', 0.55) + thin('M5.4 -2.6Q6.8 -1.8 8.2 -2.6', 0.6);
-    s += `<path d="${ell(9.4, -4.6, 1.6, 0.9)}" fill="#d98b72" fill-opacity="0.4"/>`;
-  } else {
-    s += Fs(ell(1, -10, 8.8, 9.8), c.skin);
-    s += Fs(smooth([[-9.2, -10], [-8.6, -18], [-2, -22.6], [5, -22.4], [10.2, -17], [10.6, -11], [6, -14.4], [-3, -14.6]]), c.hat, { inner: thin('M-6 -19L-5 -14.6M-1 -21.6L-0.6 -14.6M4 -21.6L4 -14.4M8 -19L7.6 -13.4', 0.55, dark(c.hat, 0.35)) });
-    s += Fs(smooth([[-9.6, -12], [-7.6, -12.6], [-6.6, -3], [-8.4, 0.4, 1], [-10.6, -3]]), '#d9cdb4', { inner: thin('M-9 -10L-8.6 -2', 0.5, '#9a8a6a') });
-    s += thin('M-8.4 0.4L-8 6', 0.6) + F(ell(-8, 6.6, 1.2, 1.2), '#d9cdb4');
-    s += Fs(smooth([[-8.4, -14.6], [0, -16.4], [10.6, -12.2], [10.4, -10.6], [0, -13.4], [-8.4, -12.6]]), '#d9cdb4');
-    s += F(ell(-2.6, -23.4, 2.8, 2.6), '#d9cdb4');
-    s += eyes(1.6, -8.2);
-    for (const [x, y] of [[4.2, -4.4], [5.6, -3.8], [8.6, -4.2], [9.8, -4.8]]) s += dot(x, y, 0.4, '#a0603a');
-    s += thin('M10.2 -5.6L11 -4.2L10 -3.8', 0.55) + thin('M5.6 -1.4L8.4 -1.8', 0.6);
+  // ноги
+  for (const sd of [-1, 1]) {
+    const l = lift(sd * st), x = sd * 5.4;
+    s += F(poly([[x - 4.4, -42 + bob], [x + 4.4, -42 + bob], [x + 4.4, -6 - l], [x - 4.4, -6 - l]]), c.pants);
+    s += F(smooth([[x - 5.2, -7 - l, 1], [x + 5.2, -7 - l, 1], [x + 6, -2.6 - l], [x + 4.6, 0.2 - l, 1], [x - 4.6, 0.2 - l, 1], [x - 6, -2.6 - l]]), c.shoe);
   }
+  const y = bob;
+  // руки по бокам (качаются в такт)
+  const armS = (sd) => {
+    const sw = moving ? -sd * st * 1.6 : 0, x0 = sd * 12.4, x1 = sd * 15.6;
+    return F(poly([[x0 - 3.4, -69 + y], [x0 + 3.4, -69 + y], [x1 + 3.6, -45 + y + sw], [x1 - 3.6, -45 + y + sw]]), back ? c.coat : dk(c.coat, 0.04)) +
+      F(smooth([[x1 - 2.6, -45.6 + y + sw], [x1 + 2.6, -45.6 + y + sw], [x1 + 3, -41 + y + sw], [x1, -38.4 + y + sw], [x1 - 3, -41 + y + sw]]), c.skin);
+  };
+  if (!back) {
+    s += F(poly([[-3, -71 + y], [3, -71 + y], [4.4, -44 + y], [-4.4, -44 + y]]), c.shirt);
+    s += F(poly([[-5, -50 + y], [5, -50 + y], [5.6, -30 + y], [-5.6, -30 + y]]), c.pants);
+  }
+  s += armS(-1) + armS(1);
+  if (back) {
+    s += F(smooth([[-11, -70 + y, 1], [11, -70 + y, 1], [13.4, -50 + y], [16.4, -30 + y, 1], [-16.4, -30 + y, 1], [-13.4, -50 + y]]), c.coat,
+      { inner: thin(`M0 ${-60 + y}L0 ${-31 + y}`, 0.55, '#000', 0.25) });
+    s += F(smooth([[-8.6, -70 + y, 1], [-9.4, -78 + y, 1], [9.4, -78 + y, 1], [8.6, -70 + y, 1]]), dk(c.coat, 0.08));
+  } else {
+    for (const sd of [-1, 1]) {
+      const X = (v) => sd * v;
+      s += F(smooth([[X(11), -70 + y, 1], [X(3.2), -70 + y, 1], [X(5), -56 + y], [X(4.8), -30 + y, 1], [X(16.4), -30 + y, 1], [X(13.4), -50 + y]]), c.coat);
+      s += F(smooth([[X(3.2), -70 + y, 1], [X(8.4), -61 + y, 1], [X(5), -52 + y, 1], [X(5), -56 + y]]), dk(c.coat, 0.07));
+      s += F(smooth([[X(3), -70 + y, 1], [X(6.6), -78 + y, 1], [X(8.2), -70 + y, 1]]), c.coat);
+    }
+  }
+  // голова
+  s += F(rect(-2.6, -74 + y, 5.2, 5), c.skin);
+  s += F(ell(0, -86 + y, 14.6, 14.6), c.skin);
+  s += thin(`M-14.4 ${-91 + y}Q0 ${-95 + y} 14.4 ${-91 + y}`, 4.8, LINE) + thin(`M-14.4 ${-91 + y}Q0 ${-95 + y} 14.4 ${-91 + y}`, 3.2, c.gog);
+  if (!back) {
+    for (const sd of [-1, 1]) s += F(ell(sd * 5.6, -92.4 + y, 4.8, 4.6), c.gog, { sw: 0.8 }) + F(ell(sd * 5.6, -92.4 + y, 3.3, 3.1), '#2c3644', { sw: 0.5 }) + dot(sd * 5.6 + 1.2, -93.6 + y, 0.9, '#b8c8d8');
+    s += dot(-4.6, -84 + y, 1.3, LINE) + dot(4.6, -84 + y, 1.3, LINE) + thin(`M-2.4 ${-79.6 + y}Q0 ${-78 + y} 2.4 ${-79.6 + y}`, 0.8);
+  } else s += F(rect(-3, -93.6 + y, 6, 4.4), dk(c.gog, 0.1), { sw: 0.6 });
   return s;
 }
-
+const head = (c) => headSide(c);
 // ---------- Позы ----------
 function pose(i, P) {
   const c = PAL[i];
@@ -89,13 +105,13 @@ function pose(i, P) {
   let o = '';
   o += g(up, g(`translate(${-sh[0] - 1} ${sh[1]}) rotate(${f(P.up ? 176 : (P.ab ?? 6))})`, arm(c, true)));
   const ls = P.legS || 1;
-  o += g(`translate(-1.6 ${f(hy)}) rotate(${f(P.lb || 0)}) scale(1 ${ls})`, leg(c, true, i));
-  o += g(`translate(1.6 ${f(hy)}) rotate(${f(P.lf || 0)}) scale(1 ${ls})`, leg(c, false, i));
-  o += g(up, torso(c, i) + (P.up ? g(`translate(${sh[0] + 1} ${sh[1]}) rotate(184)`, arm(c, false)) : '') + g(`translate(0.6 -33) rotate(${f(P.hd || 0)})`, head(c, i)));
+  o += g(`translate(-1.6 ${f(hy)}) rotate(${f(P.lb || 0)}) scale(1 ${ls})`, leg(c, true));
+  o += g(`translate(1.6 ${f(hy)}) rotate(${f(P.lf || 0)}) scale(1 ${ls})`, leg(c, false));
+  o += g(up, torso(c) + (P.up ? g(`translate(${sh[0] + 1} ${sh[1]}) rotate(184)`, arm(c, false)) : '') + g(`translate(0.4 -33) rotate(${f(P.hd || 0)})`, headSide(c)));
   if (!P.up && P.fa !== undefined) o += g(up, g(`translate(${sh[0]} ${sh[1]}) rotate(${f(P.fa)})`, arm(c, false)));
   return o;
 }
-const frame = (i, P) => svg(-60, -112, 120, 120, pose(i, P));
+const frame = (i, P) => svg(-62, -136, 124, 144, pose(i, P));
 const TAU = Math.PI * 2;
 const POSES = {
   idle0: { bob: 0 }, idle1: { bob: 0.9, hd: 3 },
@@ -126,12 +142,12 @@ function handOf(P) {
   const r = (a) => a * Math.PI / 180, L = r(P.lean || 0);
   const hip = RIG.hipY + (P.hy || 0) * 1.6;
   const [sx, sy] = RIG.shoulder, ad = r(P.fa);
-  const lx = sx - Math.sin(ad) * 26.4, ly = sy + Math.cos(ad) * 26.4;
+  const lx = sx - Math.sin(ad) * RIG.armLen, ly = sy + Math.cos(ad) * RIG.armLen;
   return { x: lx * Math.cos(L) - ly * Math.sin(L), y: hip + lx * Math.sin(L) + ly * Math.cos(L) };
 }
 
 function build(out) {
-  const meta = { poses: {}, rig: RIG, anims: {}, skin: PAL.map((c) => c.skin), coat: PAL.map((c) => c.coat) };
+  const meta = { poses: {}, rig: RIG, anims: {}, skin: PAL.map((c) => c.skin), coat: PAL.map((c) => c.coat), fb: { hand: [15.6, -41] } };
   for (let i = 0; i < 2; i++) for (const [n, frames] of Object.entries(ANIMS)) frames.forEach((F, k) => {
     out[`p${i}_a_${n}${k}`] = frame(i, F);
     if (i === 0) { (meta.anims[n] = meta.anims[n] || []).push(Object.assign(handOf(F), { wa: F.wa, lean: F.lean, hy: F.hy * 1.6 })); }
@@ -151,8 +167,11 @@ function build(out) {
       if (i === 0) meta.poses[n] = { bob: P.bob || 0, lean: P.lean || 0, hy: (P.hy || 0) * 1.6, baked: P.fa !== undefined };
     }
     out[`p${i}_down`] = svg(-112, -36, 132, 46, g('translate(6 -6) rotate(-86)', pose(i, { ab: 70, fa: -60, lf: 8, lb: -6, hd: -14 })));
-    out[`p${i}_arm`] = svg(-6, -5, 12, 36, arm(PAL[i], false));
-    out[`p${i}_head`] = svg(-16, -30, 32, 40, head(PAL[i], i));
+    out[`p${i}_arm`] = svg(-6, -5, 12, 38, arm(PAL[i], false));
+    out[`p${i}_head`] = svg(-18, -104, 36, 40, viewFB(PAL[i], false, 0, false));
+    for (let k = 0; k < 4; k++) { out[`p${i}_fwalk${k}`] = svg(-30, -106, 60, 110, viewFB(PAL[i], false, k / 4 * TAU, true)); out[`p${i}_bwalk${k}`] = svg(-30, -106, 60, 110, viewFB(PAL[i], true, k / 4 * TAU, true)); }
+    out[`p${i}_fidle`] = svg(-30, -106, 60, 110, viewFB(PAL[i], false, 0, false));
+    out[`p${i}_bidle`] = svg(-30, -106, 60, 110, viewFB(PAL[i], true, 0, false));
   }
   require('./weapons').build(out);
   out.__meta = meta;
