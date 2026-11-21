@@ -93,7 +93,7 @@ function jumperBody(ph, crouch) {
 }
 
 // ================= Прилипала =================
-function clingerBody(ph) {
+function clingerBody(ph, noLegs) {
   let o = '';
   const legs = (side, dk) => {
     let s = '';
@@ -105,7 +105,7 @@ function clingerBody(ph) {
     }
     return s;
   };
-  o += legs(0, true);
+  if (!noLegs) o += legs(0, true);
   o += shape(ell(-2.4, -12, 10.6, 8.4), '#b59a8f', { sh: [2.6, 2.2], sw: 1.4,
     inner: line('M-8 -18Q-10 -12 -8 -5M-3 -19.6Q-5 -12 -3 -4M2 -19Q0.4 -12 2 -4.6', 0.7, '#6a4a44', 0.7) +
       `<path d="${ell(-6, -10, 1.8, 1.4)}" fill="#7a4a44" fill-opacity="0.6"/><path d="${ell(0, -15, 1.4, 1.1)}" fill="#7a4a44" fill-opacity="0.6"/>` });
@@ -113,7 +113,7 @@ function clingerBody(ph) {
   o += shape(ell(8.4, -11, 5, 4.4), '#7d5a52', { sh: [1.6, 1.4], sw: 1.3 });
   o += dot(10, -12.6, 1.3, '#d4302a') + dot(10.4, -13, 0.4, '#ffd0c0') + dot(7.6, -13.6, 0.9, '#d4302a') + dot(11.6, -10, 0.8, '#d4302a');
   o += L.limb([[11.6, -9], [15, -8], [14.6, -5.4]], 1.2, '#cdbb98', { sw: 0.8 }) + L.limb([[12, -12.4], [15.6, -13], [16, -10.6]], 1.2, '#cdbb98', { sw: 0.8 });
-  o += legs(1, false);
+  if (!noLegs) o += legs(1, false);
   return o;
 }
 
@@ -188,4 +188,4 @@ function build(out) {
   out.clinger_wind = W.clinger(0.5);
   out.brute_wind = W.brute(0, true);
 }
-module.exports = { build };
+module.exports = { build, P: { wLeg, wArm, wTorso, jHind, jFront, jBody, bLeg, bArm, bBody, clingerBody } };

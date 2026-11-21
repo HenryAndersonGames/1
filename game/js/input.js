@@ -16,16 +16,16 @@ const Input = (() => {
   const KB = [
     { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
       light: ['KeyJ', 'KeyF'], heavy: ['KeyK', 'KeyG'], roll: ['Space', 'ShiftLeft'], interact: ['KeyE'], build: ['KeyQ'],
-      trap: ['KeyR'], heal: ['KeyH', 'KeyC'], eat: ['KeyV'], swap: ['KeyT'], ab1: ['KeyU', 'Digit1'], ab2: ['KeyI', 'Digit2'], ab3: ['KeyO', 'Digit3'], menu: ['Tab'], start: ['Escape', 'Enter'] },
+      trap: ['KeyR'], heal: ['KeyH', 'KeyC'], eat: ['KeyV'], swap: ['KeyT'], ab1: ['KeyU', 'Digit1'], ab2: ['KeyI', 'Digit2'], ab3: ['KeyO', 'Digit3'], ab4: ['KeyL', 'Digit4'], ab5: ['KeyP', 'Digit5'], menu: ['Tab'], start: ['Escape', 'Enter'] },
     { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
       light: ['Numpad1', 'KeyM'], heavy: ['Numpad2', 'Comma'], roll: ['Numpad3', 'Period'], interact: ['Numpad0', 'Slash'], build: ['Numpad4'],
-      trap: ['Numpad5'], heal: ['Numpad6'], eat: ['NumpadSubtract'], swap: ['NumpadMultiply'], ab1: ['Numpad7'], ab2: ['Numpad8'], ab3: ['Numpad9'], menu: ['NumpadAdd', 'Quote'], start: ['NumpadEnter'] },
+      trap: ['Numpad5'], heal: ['Numpad6'], eat: ['NumpadSubtract'], swap: ['NumpadMultiply'], ab1: ['Numpad7'], ab2: ['Numpad8'], ab3: ['Numpad9'], ab4: ['NumpadDecimal'], ab5: ['NumpadDivide'], menu: ['NumpadAdd', 'Quote'], start: ['NumpadEnter'] },
   ];
   // Геймпад (Xbox): A=0 B=1 X=2 Y=3 LB=4 RB=5 LT=6 RT=7 Back=8 Start=9
   // X — лёгкая атака, Y — тяжёлая, A — действие, B — перекат,
   // LB / RB / RT — три слота особых способностей, LT — бинт, крестовина ← баррикада, → ловушка
-  const PAD = { light: [2], heavy: [3], roll: [1], interact: [0], ab1: [4], ab2: [5], ab3: [7], heal: [6], swap: [12], eat: [13], build: [14], trap: [15], menu: [8], start: [9] };
-  const BTN = ['light', 'heavy', 'roll', 'interact', 'build', 'trap', 'heal', 'eat', 'swap', 'ab1', 'ab2', 'ab3', 'menu', 'start'];
+  const PAD = { light: [2], heavy: [3], roll: [1], interact: [0], ab1: [4], ab2: [5], ab3: [7], ab4: [10], ab5: [11], heal: [6], swap: [12], eat: [13], build: [14], trap: [15], menu: [8], start: [9] };
+  const BTN = ['light', 'heavy', 'roll', 'interact', 'build', 'trap', 'heal', 'eat', 'swap', 'ab1', 'ab2', 'ab3', 'ab4', 'ab5', 'menu', 'start'];
   const ALL = BTN.concat(['up', 'down', 'left', 'right']);
 
   const mk = () => ({ mx: 0, my: 0, ax: 0, ay: 0, pad: null, down: {}, prev: {}, pressed: {} });
@@ -70,10 +70,10 @@ const Input = (() => {
   }
 
   // Название кнопки для подсказок
-  const PADNAME = { light: 'X', heavy: 'Y', roll: 'B', interact: 'A', build: '◀', trap: '▶', heal: 'LT', eat: '▼', swap: '▲', ab1: 'LB', ab2: 'RB', ab3: 'RT', menu: 'Back', start: 'Start' };
+  const PADNAME = { light: 'X', heavy: 'Y', roll: 'B', interact: 'A', build: '◀', trap: '▶', heal: 'LT', eat: '▼', swap: '▲', ab1: 'LB', ab2: 'RB', ab3: 'RT', ab4: 'L3', ab5: 'R3', menu: 'Back', start: 'Start' };
   const KBNAME = [
-    { light: 'J', heavy: 'K', roll: 'Пробел', interact: 'E', build: 'Q', trap: 'R', heal: 'H', eat: 'V', swap: 'T', ab1: 'U', ab2: 'I', ab3: 'O', menu: 'Tab', start: 'Enter' },
-    { light: 'Num1', heavy: 'Num2', roll: 'Num3', interact: 'Num0', build: 'Num4', trap: 'Num5', heal: 'Num6', eat: 'Num−', swap: 'Num*', ab1: 'Num7', ab2: 'Num8', ab3: 'Num9', menu: 'Num+', start: 'NumEnter' },
+    { light: 'J', heavy: 'K', roll: 'Пробел', interact: 'E', build: 'Q', trap: 'R', heal: 'H', eat: 'V', swap: 'T', ab1: 'U', ab2: 'I', ab3: 'O', ab4: 'L', ab5: 'P', menu: 'Tab', start: 'Enter' },
+    { light: 'Num1', heavy: 'Num2', roll: 'Num3', interact: 'Num0', build: 'Num4', trap: 'Num5', heal: 'Num6', eat: 'Num−', swap: 'Num*', ab1: 'Num7', ab2: 'Num8', ab3: 'Num9', ab4: 'Num.', ab5: 'Num/', menu: 'Num+', start: 'NumEnter' },
   ];
   function btn(i, action) { return ctrls[i].pad ? PADNAME[action] : KBNAME[i][action]; }
   function anyPressed(action) { return ctrls[0].pressed[action] || ctrls[1].pressed[action]; }

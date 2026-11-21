@@ -56,22 +56,23 @@ function wLegF(dk) {
   const c = dk ? dark(WC, 0.2) : WC;
   return shape(smooth([[-2.6, -2], [-3, 14], [-3, 23], [-4.6, 27, 1], [4, 27, 1], [2.4, 23], [2.6, 12], [2.6, -2]]), c, { sw: 1.3, sh: [1.2, 1.2], lk: 0.22 });
 }
+function wolfTorso() {
+  let b = '';
+  // хвост
+  b += shape(smooth([[-28, -8], [-38, -12], [-48, -10, 1], [-42, -6], [-47, -2, 1], [-38, -2], [-28, -2]]), WC, { sw: 1.2, sh: [1.6, 1.4], lk: 0.2 });
+  b += shape(smooth([[-30, -2], [-28, -10], [-20, -15], [-8, -17], [4, -16], [14, -14], [20, -18], [26, -23.4], [32, -24.6], [38, -22], [46.4, -19, 1], [44.4, -15.6], [36.4, -14.4], [38.4, -11, 1], [30, -11], [24, -8], [16, -4], [6, 0], [-8, 2], [-22, 2]]), WC, { sw: 1.5, sh: [3, 2.4], lk: 0.22,
+    inner: line('M-18 -12L-14 -8M-10 -14L-6 -10M-2 -14L2 -10M6 -13L10 -9', 0.8, '#55536a', 0.8) });
+  // шерсть дыбом по хребту
+  b += shape(smooth([[-24, -13], [-22, -20, 1], [-18, -15], [-14, -22, 1], [-10, -16.6], [-6, -23, 1], [-2, -17], [2, -22, 1], [6, -16.4], [10, -20, 1], [14, -14.6]]), WC, { sw: 1.2, flat: true, nodrop: true });
+  b += shape(smooth([[26, -23.4], [27.4, -32, 1], [31.6, -24.6]]), WC, { sw: 1.1, flat: true });
+  b += shape(ell(33.4, -20.6, 2, 1.3), '#f0de6a', { sw: 0.7, nodrop: true, flat: true }) + dot(33.8, -20.6, 0.6, INK);
+  b += `<path d="M37 -14.4L38 -12.6L39 -14.6L40 -12.8L41 -15" fill="none" stroke="#eadfbe" stroke-width="0.8"/>`;
+  return b;
+}
 function wolfBody(ph, wind) {
+  const body = wolfTorso;
   const s = Math.sin(ph), bob = wind ? 7 : -Math.abs(Math.cos(ph)) * 2.4;
   const la = wind ? 0 : s * 32;
-  const body = () => {
-    let b = '';
-    // хвост
-    b += shape(smooth([[-28, -8], [-38, -12], [-48, -10, 1], [-42, -6], [-47, -2, 1], [-38, -2], [-28, -2]]), WC, { sw: 1.2, sh: [1.6, 1.4], lk: 0.2 });
-    b += shape(smooth([[-30, -2], [-28, -10], [-20, -15], [-8, -17], [4, -16], [14, -14], [20, -18], [26, -23.4], [32, -24.6], [38, -22], [46.4, -19, 1], [44.4, -15.6], [36.4, -14.4], [38.4, -11, 1], [30, -11], [24, -8], [16, -4], [6, 0], [-8, 2], [-22, 2]]), WC, { sw: 1.5, sh: [3, 2.4], lk: 0.22,
-      inner: line('M-18 -12L-14 -8M-10 -14L-6 -10M-2 -14L2 -10M6 -13L10 -9', 0.8, '#55536a', 0.8) });
-    // шерсть дыбом по хребту
-    b += shape(smooth([[-24, -13], [-22, -20, 1], [-18, -15], [-14, -22, 1], [-10, -16.6], [-6, -23, 1], [-2, -17], [2, -22, 1], [6, -16.4], [10, -20, 1], [14, -14.6]]), WC, { sw: 1.2, flat: true, nodrop: true });
-    b += shape(smooth([[26, -23.4], [27.4, -32, 1], [31.6, -24.6]]), WC, { sw: 1.1, flat: true });
-    b += shape(ell(33.4, -20.6, 2, 1.3), '#f0de6a', { sw: 0.7, nodrop: true, flat: true }) + dot(33.8, -20.6, 0.6, INK);
-    b += `<path d="M37 -14.4L38 -12.6L39 -14.6L40 -12.8L41 -15" fill="none" stroke="#eadfbe" stroke-width="0.8"/>`;
-    return b;
-  };
   let o = '';
   o += g(`translate(-17 ${f(-27 + bob * 0.3)}) rotate(${f(wind ? -30 : la)})`, wLegH(true));
   o += g(`translate(16 ${f(-27 + bob * 0.3)}) rotate(${f(wind ? 24 : -la)})`, wLegF(true));
@@ -82,6 +83,22 @@ function wolfBody(ph, wind) {
 }
 
 // ================= Тыквопаук =================
+function spiderTorso(wind) {
+  let o = '';
+  const ry = wind ? -30 : -24;
+  // брюшко-тыква
+  o += shape(ell(-10, ry, 21, 17.4), '#c06420', { sh: [4, 3], sw: 1.6, hgap: 2.4, lk: 0.2,
+    inner: line(`M-10 ${ry - 17}Q-14 ${ry} -10 ${ry + 17}M-2 ${ry - 16}Q2 ${ry} -1 ${ry + 16}M-18 ${ry - 15}Q-24 ${ry} -19 ${ry + 15}M5 ${ry - 11}Q9 ${ry} 6 ${ry + 12}M-25 ${ry - 9}Q-29 ${ry} -26 ${ry + 9}`, 1, '#6a2e0c', 0.85) +
+      `<path d="${ell(-18, ry + 6, 5, 3.4)}" fill="#3a4a24" fill-opacity="0.8"/><path d="${ell(0, ry - 8, 3, 2.2)}" fill="#3a4a24" fill-opacity="0.8"/>` +
+      `<path d="${ell(-6, ry + 8, 4.4, 3)}" fill="#2a120a"/>` + line(`M-9 ${ry + 7}L-12 ${ry + 12}M-4 ${ry + 10}L-3 ${ry + 14}`, 1, '#4a5a20', 0.9) });
+  o += shape(smooth([[-12, ry - 16], [-13, ry - 22], [-9, ry - 24, 1], [-9, ry - 17]]), '#4a5a2a', { sw: 1, flat: true });
+  // головогрудь
+  const hx = 14, hy = wind ? -30 : -18;
+  o += shape(ell(hx, hy, 8, 7), '#2c2226', { sw: 1.4, sh: [1.6, 1.4], lk: 0.25 });
+  for (const [x, y, r] of [[hx + 4, hy - 3, 1.5], [hx + 6.4, hy - 1, 1.1], [hx + 1.6, hy - 4, 1.1], [hx + 4.6, hy + 1, 0.9]]) o += dot(x, y, r, '#e0301e');
+  o += limb([[hx + 6, hy + 3], [hx + 10, hy + 6], [hx + 8, hy + 9]], 1.4, '#d6c8a4', { sw: 0.8 }) + limb([[hx + 3, hy + 4], [hx + 6, hy + 8], [hx + 3.6, hy + 10]], 1.4, '#d6c8a4', { sw: 0.8 });
+  return o;
+}
 function spiderBody(ph, wind) {
   let o = '';
   const legs = (side, dk) => {
@@ -97,29 +114,15 @@ function spiderBody(ph, wind) {
     return s;
   };
   o += legs(0, true);
-  const ry = wind ? -30 : -24;
-  // брюшко-тыква
-  o += shape(ell(-10, ry, 21, 17.4), '#c06420', { sh: [4, 3], sw: 1.6, hgap: 2.4, lk: 0.2,
-    inner: line(`M-10 ${ry - 17}Q-14 ${ry} -10 ${ry + 17}M-2 ${ry - 16}Q2 ${ry} -1 ${ry + 16}M-18 ${ry - 15}Q-24 ${ry} -19 ${ry + 15}M5 ${ry - 11}Q9 ${ry} 6 ${ry + 12}M-25 ${ry - 9}Q-29 ${ry} -26 ${ry + 9}`, 1, '#6a2e0c', 0.85) +
-      `<path d="${ell(-18, ry + 6, 5, 3.4)}" fill="#3a4a24" fill-opacity="0.8"/><path d="${ell(0, ry - 8, 3, 2.2)}" fill="#3a4a24" fill-opacity="0.8"/>` +
-      `<path d="${ell(-6, ry + 8, 4.4, 3)}" fill="#2a120a"/>` + line(`M-9 ${ry + 7}L-12 ${ry + 12}M-4 ${ry + 10}L-3 ${ry + 14}`, 1, '#4a5a20', 0.9) });
-  o += shape(smooth([[-12, ry - 16], [-13, ry - 22], [-9, ry - 24, 1], [-9, ry - 17]]), '#4a5a2a', { sw: 1, flat: true });
-  // головогрудь
-  const hx = 14, hy = wind ? -30 : -18;
-  o += shape(ell(hx, hy, 8, 7), '#2c2226', { sw: 1.4, sh: [1.6, 1.4], lk: 0.25 });
-  for (const [x, y, r] of [[hx + 4, hy - 3, 1.5], [hx + 6.4, hy - 1, 1.1], [hx + 1.6, hy - 4, 1.1], [hx + 4.6, hy + 1, 0.9]]) o += dot(x, y, r, '#e0301e');
-  o += limb([[hx + 6, hy + 3], [hx + 10, hy + 6], [hx + 8, hy + 9]], 1.4, '#d6c8a4', { sw: 0.8 }) + limb([[hx + 3, hy + 4], [hx + 6, hy + 8], [hx + 3.6, hy + 10]], 1.4, '#d6c8a4', { sw: 0.8 });
+  o += spiderTorso(wind);
   o += legs(1, false);
   return o;
 }
 
 // ================= Пустотник =================
-function voidBody(ph, wind) {
-  const fl = -8 + Math.sin(ph) * 2.4, sway = Math.sin(ph + 1) * 2.4;
-  let o = '';
+function voidRobe(fl, sway) {
   const robe = '#2b2735';
-  // дальняя рука
-  if (wind) o += g(`translate(2 ${f(fl - 58)}) rotate(-80)`, vArm(true));
+  let o = '';
   // мантия с рваным подолом
   o += shape(smooth([[-13, fl - 10], [-17, fl - 34], [-15, fl - 62], [-9, fl - 82], [1, fl - 90], [11, fl - 86], [15.6, fl - 72], [16, fl - 44], [18 + sway, fl - 8], [17 + sway, fl + 2, 1], [12 + sway, fl - 4], [8 + sway * 0.6, fl + 6, 1], [4, fl - 3], [0 - sway * 0.4, fl + 8, 1], [-4, fl - 2], [-8 - sway, fl + 5, 1], [-11, fl - 4], [-15 - sway, fl + 1, 1]]), robe, { sh: [3.6, 3], sw: 1.5, lk: 0.14,
     inner: line(`M-6 ${fl - 70}Q-9 ${fl - 40} -6 ${fl - 6}M4 ${fl - 60}Q6 ${fl - 34} 5 ${fl - 6}`, 0.8, '#0e0c14', 0.7) });
@@ -127,6 +130,15 @@ function voidBody(ph, wind) {
   o += shape(smooth([[-6, fl - 78], [0, fl - 87], [10, fl - 84], [14, fl - 72], [12, fl - 60], [2, fl - 58], [-4, fl - 64]]), '#14111a', { sw: 1.2, flat: true, nodrop: true });
   o += shape(ell(6.4, fl - 71, 6.4, 8.6), '#e2ddd0', { sw: 1.2, sh: [1.6, 1.6], hop: 0.2, nodrop: true,
     inner: line(`M5 ${fl - 79}L6.6 ${fl - 74}L5.4 ${fl - 70}`, 0.6, INK, 0.7) + `<path d="${ell(8.6, fl - 72.4, 1.4, 0.8)}" fill="#3a3448"/><path d="${ell(4, fl - 72.6, 1.2, 0.7)}" fill="#3a3448"/>` });
+  return o;
+}
+function voidBody(ph, wind) {
+  const fl = -8 + Math.sin(ph) * 2.4, sway = Math.sin(ph + 1) * 2.4;
+  let o = '';
+  const robe = '#2b2735';
+  // дальняя рука
+  if (wind) o += g(`translate(2 ${f(fl - 58)}) rotate(-80)`, vArm(true));
+  o += voidRobe(fl, sway);
   // ближняя рука
   o += g(`translate(6 ${f(fl - 56)}) rotate(${wind ? -84 : 18 + sway * 2})`, vArm(false));
   if (wind) o += `<path d="${ell(26, fl - 58, 7, 7)}" fill="#b48cff" fill-opacity="0.35"/>` + shape(ell(26, fl - 58, 4, 4), '#d8c4ff', { sw: 1, nodrop: true, flat: true });
@@ -211,4 +223,4 @@ function build(out) {
   out.void_die = svg(-120, -72, 150, 78, g('translate(4 -32) rotate(-84)', voidBody(0, false)));
   out.titan_die = svg(-350, -250, 390, 258, g('translate(0 -116) rotate(-82)', titanBody(0.4, false)));
 }
-module.exports = { build };
+module.exports = { build, P: { gLeg, gArm, gTorso, wLegH, wLegF, wolfTorso, vArm, voidRobe, tLeg, tArm, tBody, spiderTorso } };

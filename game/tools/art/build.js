@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.resolve(__dirname, '../..');
 const out = {};
-const mods = ['chars', 'creatures', 'nature', 'props', 'places', 'icons'];
+const mods = ['chars', 'creatures', 'rigs', 'nature', 'props', 'places', 'icons'];
 for (const m of mods) {
   const p = path.join(__dirname, m + '.js');
   if (fs.existsSync(p)) require(p).build(out);

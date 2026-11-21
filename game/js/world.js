@@ -121,27 +121,30 @@ function buildWorld() {
   World.floors.push({ x: 3872, y: 160, w: 96, h: 1344, kind: 'asphalt', road: 1 });
 
   // ===== База: дом в лесу =====
-  const hx = 2208, hy = 1632, hw = 320, hh = 256;
+  const hx = 2112, hy = 1568, hw = 448, hh = 352;
   World.house = { x: hx, y: hy, w: hw, h: hh };
-  building(hx, hy, hw, hh, 'wood', 'wood', { n: [Wn(2272), Wn(2432)], s: [D(2336)], w: [Wn(1728)], e: [D(1728)] });
+  building(hx, hy, hw, hh, 'wood', 'wood', { n: [Wn(2208), Wn(2432)], s: [D(2304)], w: [Wn(1728)], e: [D(1728)] });
+  // перегородка: спальня справа, проход 64
   World.lantern = { x: hx + hw / 2, y: hy + hh / 2 - 10 };
-  addFurn('cabinet', hx + 24, hy + 24); addFurn('crate', hx + 260, hy + 30); addFurn('table', hx + 128, hy + 100); addFurn('crate', hx + 30, hy + 180);
-  World.bench = addProp('bench', hx + 230, hy + 180);
+  addWall(hx + 288, hy + 16, 16, hh - 32, [{ at: 96, len: 96, kind: 'gap' }], 'wood');
+  addFurn('cabinet', hx + 24, hy + 24); addFurn('crate', hx + 104, hy + 30); addFurn('table', hx + 112, hy + 130); addFurn('crate', hx + 30, hy + 250);
+  addFurn('bed', hx + 370, hy + 28); addFurn('cabinet', hx + 330, hy + 270); addFurn('sofa', hx + 150, hy + 262);
+  World.bench = addProp('bench', hx + 196, hy + 40);
   World.fire = { x: hx + hw / 2, y: hy + hh + 112, r: 24 };
   World.gen = addProp('generator', hx + hw + 20, hy + 40);
   World.gen.fuel = 0; World.gen.on = false;
   World.floods = [addProp('flood', hx - 40, hy + hh + 40), addProp('flood', hx + hw + 40, hy + hh + 40)];
 
   // ===== Город =====
-  building(3200, 384, 288, 224, 'brick', 'tile', { s: [D(3296)] });
-  World.shop = { x: 3520, y: 352, w: 320, h: 288 };
-  building(3520, 352, 320, 288, 'brick', 'tile', { s: [D(3648)] });
-  building(4032, 384, 288, 256, 'brick', 'tile', { s: [D(4128, true)] });
-  building(4384, 384, 320, 256, 'metal', 'concrete', { s: [D(4512)] });
-  building(3232, 1024, 256, 224, 'wood', 'wood', { n: [D(3328)], e: [Wn(1088)], w: [Wn(1120)] });
-  building(3648, 1216, 192, 160, 'brick', 'tile', { n: [D(3712)] });
-  building(4064, 1056, 288, 224, 'brick', 'wood', { n: [D(4160)] });
-  building(4416, 1088, 224, 192, 'wood', 'wood', { n: [D(4480)], w: [Wn(1168)] });
+  building(3168, 256, 320, 352, 'brick', 'tile', { s: [D(3296)] });
+  World.shop = { x: 3520, y: 224, w: 352, h: 416 };
+  building(3520, 224, 352, 416, 'brick', 'tile', { s: [D(3648)] });
+  building(4000, 256, 320, 384, 'brick', 'tile', { s: [D(4128, true)] });
+  building(4384, 256, 320, 384, 'metal', 'concrete', { s: [D(4512)] });
+  building(3200, 1024, 320, 320, 'wood', 'wood', { n: [D(3328)], e: [Wn(1088)], w: [Wn(1120)] });
+  building(3616, 1216, 256, 224, 'brick', 'tile', { n: [D(3712)] });
+  building(4032, 1056, 352, 320, 'brick', 'wood', { n: [D(4160)] });
+  building(4416, 1088, 288, 288, 'wood', 'wood', { n: [D(4480)], w: [Wn(1168)] });
   World.floors.push({ x: 3520, y: 960, w: 352, h: 224, kind: 'asphalt' });
   // интерьеры
   for (let i = 0; i < 3; i++) addProp('shelf', 3552 + (i % 2) * 120, 400 + i * 64);
@@ -184,7 +187,7 @@ function buildWorld() {
 
   // ===== Ферма =====
   building(448, 2528, 352, 288, 'barn', 'hay', { e: [D(2624)], s: [D(608)] });
-  building(1216, 2560, 256, 224, 'wood', 'wood', { s: [D(1312)], n: [Wn(1280), Wn(1408)], e: [Wn(2656)] });
+  building(1184, 2528, 320, 288, 'wood', 'wood', { s: [D(1312)], n: [Wn(1280), Wn(1408)], e: [Wn(2656)] });
   for (const [x, y] of [[480, 2580], [530, 2580], [480, 2640], [700, 2700]]) addProp('hay', x, y);
   addProp('cratestack', 720, 2580); addProp('locker', 660, 2570);
   addFurn('bed', 1240, 2600); addFurn('table', 1320, 2640); addProp('fridge', 1420, 2600); addFurn('cabinet', 1380, 2720);
@@ -207,7 +210,7 @@ function buildWorld() {
   fenceLine(1760, 224, 1760, 1256, 'fencebarb', [[640, 736]]);
   World.floors.push({ x: 232, y: 232, w: 1528, h: 1016, kind: 'concrete' });
   building(512, 448, 480, 320, 'concrete', 'lab', { s: [D(736)], e: [D(560, true)] });
-  building(1248, 512, 192, 160, 'concrete', 'lab', { s: [D(1312)] });
+  building(1216, 448, 288, 224, 'concrete', 'lab', { s: [D(1312)] });
   for (let i = 0; i < 3; i++) addProp('labtable', 560 + i * 120, 500);
   addProp('capsule', 560, 620); addProp('capsule_broken', 620, 620); addProp('capsule', 680, 620);
   addProp('rack', 900, 480); addProp('rack', 940, 480); addProp('locker', 920, 640); addProp('labtable', 800, 660);

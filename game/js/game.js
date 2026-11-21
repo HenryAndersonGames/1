@@ -7,7 +7,7 @@ const DAY_LEN = 140, DUSK_LEN = 20, NIGHT_LEN = 85;
 const G = {
   state: 'title', t: 0, day: 1, phase: 'day', phaseT: 0,
   team: {}, players: [], enemies: [], items: [], pickups: [], projs: [], parts: [], texts: [], stains: [], msgs: [],
-  tracers: [], flashes: [], eprojs: [], webs: [], fires: [], waves: [], bolts: [], allies: [], bombs: [], sparks: [], dmgNums: [], camKick: null, slowT: 0, ambT: 3,
+  tracers: [], flashes: [], eprojs: [], webs: [], fires: [], waves: [], bolts: [], allies: [], bombs: [], sparks: [], dmgNums: [], mines: [], turrets: [], vortexes: [], rubble: [], camKick: null, slowT: 0, ambT: 3,
   spawnQ: [], kills: 0, cam: { x: 2368, y: 1900, zoom: 1 }, shake: 0, hitstop: 0, flowT: 0, flowDirty: true, overT: 0,
   paused: false, showFps: true, quality: 1, bestNight: 0, zoneShown: {},
 };
@@ -19,12 +19,13 @@ function msg(text, col = '#f2e6c8') {
 
 function newGame() {
   buildWorld();
+  MM.dirty = true; MM.seen = null;
   const f = World.fire;
   Object.assign(G, { t: 0, day: 1, phase: 'day', phaseT: 0, kills: 0, overT: 0, zoneShown: {} });
   G.team = { wood: 4, scrap: 2, cloth: 1, fuel: 1, ammo: 0, band: 1, food: 2 };
   G.players = [makePlayer(0, f.x - 50, f.y - 50), makePlayer(1, f.x + 50, f.y - 50)];
   G.players[1].weapon = { type: 'pipe', dur: WEAPONS.pipe.durab };
-  for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies', 'bombs', 'sparks', 'dmgNums', 'rubble']) G[k] = [];
+  for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies', 'bombs', 'sparks', 'dmgNums', 'rubble', 'mines', 'turrets', 'vortexes']) G[k] = [];
   G.cam.x = f.x; G.cam.y = f.y - 80; G.cam.zoom = 1;
   G.flowDirty = true;
   // подручные предметы и находки
@@ -222,7 +223,7 @@ function update(dt) {
   for (const p of G.players) {
     const c = Input.ctrls[p.i];
     p.buf = p.buf || {};
-    for (const a of ['light', 'heavy', 'roll', 'ab1', 'ab2', 'ab3']) { if (c.pressed[a]) p.buf[a] = 0.25; else if (p.buf[a] > 0) p.buf[a] -= dt; }
+    for (const a of ['light', 'heavy', 'roll', 'ab1', 'ab2', 'ab3', 'ab4', 'ab5']) { if (c.pressed[a]) p.buf[a] = 0.25; else if (p.buf[a] > 0) p.buf[a] -= dt; }
   }
   for (let i = G.sparks.length - 1; i >= 0; i--) { G.sparks[i].t -= dt; if (G.sparks[i].t <= 0) G.sparks.splice(i, 1); }
   for (let i = G.dmgNums.length - 1; i >= 0; i--) { const n = G.dmgNums[i]; n.t -= dt; n.y += n.vy * dt; n.vy += 160 * dt; if (n.t <= 0) G.dmgNums.splice(i, 1); }
@@ -252,6 +253,7 @@ function update(dt) {
   updateProjs(dt);
   updateHazards(dt);
   updateAllies(dt);
+  updateExtras(dt);
   updatePickups(dt);
   updateParts(dt);
   for (const s of World.structs) {

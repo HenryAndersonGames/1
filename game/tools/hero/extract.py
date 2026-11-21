@@ -38,10 +38,29 @@ def cutout(img):
     rgba[soft, :3] = [42, 36, 46]; rgba[soft, 3] = a[soft] * 255
     return rgba
 
-def crop_part(rgba, mask, pad=2):
-    ys, xs = np.where(mask & (rgba[..., 3] > 0))
+OUTLINE = 6  # толщина общего контура в пикселях видео — как у остальной графики игры
+def dilate(m, r):
+    out = m.copy()
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if dx * dx + dy * dy <= r * r + 0.5:
+                out |= np.roll(np.roll(m, dy, 0), dx, 1)
+    return out
+def crop_part(rgba, mask, pad=2, outline=True):
+    vis = rgba[..., 3] > 0
+    m = mask & vis
+    # убираем одиночные пиксели-соринки (иначе контур превращает их в точки рядом с фигурой)
+    m = dilate(~dilate(~m, 2), 2) & m | (m & dilate(dilate(~dilate(~m, 2), 2), 3))
+    part = rgba.copy()
+    if outline and OUTLINE:
+        # контур только снаружи силуэта всей фигуры — на стыках частей швов нет
+        ring = dilate(m, OUTLINE) & ~vis
+        inner = dilate(m, OUTLINE - 2) & ~vis
+        part[ring, :3] = [26, 17, 11]; part[ring, 3] = 150; part[inner, 3] = 255
+        m = m | ring
+    ys, xs = np.where(m)
     y0, y1, x0, x1 = ys.min() - pad, ys.max() + pad + 1, xs.min() - pad, xs.max() + pad + 1
-    part = rgba.copy(); part[~mask, 3] = 0
+    part[~m, 3] = 0
     return part[y0:y1, x0:x1], (int(x0), int(y0))
 
 def poly_mask(shape, pts):
@@ -141,28 +160,99 @@ parts = {
     'leg': dict(img=leg_img, o=leg_o, bones=[HIP, KN, AN]),
 }
 
-# ---------- ВИДЫ СПЕРЕДИ И СЗАДИ: целиком (ноги и руки двигаем мешем по вертикальным костям) ----------
-def full(name, foot=None):
+# ---------- ВИДЫ СПЕРЕДИ И СЗАДИ: тело + отдельные руки (рукав+кисть) и ноги — сгибаются и укорачиваются в глубину ----------
+def fb_parts(name, inner, legx, legy0, cx):
+    """inner: {'L': ((x0,y0),(x1,y1)), 'R': ...} — внутренняя линия рукава от подмышки до манжеты."""
     r = cutout(load(name))
-    m = r[..., 3] > 0
-    img, o = crop_part(r, m)
-    ys = np.where(m)[0]
-    return dict(img=img, o=o, foot=int(ys.max()))
-front = full('front.png'); back = full('back.png')
+    Hh, Ww = r.shape[:2]
+    vis = r[..., 3] > 0
+    yy, xx = np.mgrid[0:Hh, 0:Ww]
+    h_, s_, v_ = hue(r[..., :3])
+    teal = (h_ > 175) & (h_ < 205) & (s_ > 0.25) & (v_ > 0.3)
+    foot = int(np.where(vis)[0].max())
+    res = {}
+    for side, ((x0, y0), (x1, y1)) in inner.items():
+        sg = -1 if side == 'L' else 1
+        line = {}
+        for y in range(y0, y1 + 1):
+            xe = x0 + (x1 - x0) * (y - y0) / max(1, y1 - y0)
+            best, bx = 999, int(round(xe))
+            for x in range(int(xe) - 5, int(xe) + 6):
+                v = r[y, x, :3].max()
+                if v < best: best, bx = v, x
+            line[y] = bx
+        arm = np.zeros((Hh, Ww), bool)
+        strict = np.zeros((Hh, Ww), bool)
+        for y in range(y0 - 22, y1 + 1):
+            xl = line.get(y, line[y0])
+            if sg < 0: arm[y, :xl + 2] = True
+            else: arm[y, xl - 1:] = True
+            if y >= y0 + 20:  # верх рукава (плечо) остаётся и на теле — без дыр при взмахе
+                if sg < 0: strict[y, :xl - 1] = True
+                else: strict[y, xl + 2:] = True
+        # кисть под манжетой
+        hx = line[y1]
+        skin = (h_ > 8) & (h_ < 42) & (s_ > 0.25) & (v_ > 0.45)
+        hz = (yy > y1 - 4) & (yy < y1 + 44) & ((xx < hx + 4) if sg < 0 else (xx > hx - 4))
+        sk = skin & hz
+        dil = sk.copy()
+        for dy in (-2, -1, 0, 1, 2):
+            for dx in (-2, -1, 0, 1, 2):
+                dil |= np.roll(np.roll(sk, dy, 0), dx, 1)
+        hand = dil & hz & ~teal
+        arm = (arm | hand) & vis; strict = (strict | hand) & vis
+        # только внешняя половина фигуры
+        half = (xx < cx) if sg < 0 else (xx > cx)
+        arm &= half; strict &= half
+        res['arm' + side] = (arm, strict)
+        # кости руки: плечо, локоть, запястье (по линии рукава, чуть наружу)
+        sx = line[y0] + sg * 9
+        res['armb' + side] = [(sx, y0 - 4), ((sx + line[y1] + sg * 10) / 2 + sg * 2, (y0 + y1) / 2 + 2), (line[y1] + sg * 12, y1 + 2)]
+    legs = {}
+    for side, (xa, xb) in legx.items():
+        m = (yy >= legy0) & (xx >= xa) & (xx < xb) & vis & ~(teal & (yy < legy0 + 14))
+        legs[side] = m
+    body_m = vis & (yy < legy0 + 16)
+    for side in ('L', 'R'):
+        body_m &= ~res['arm' + side][1]
+        body_m &= ~legs[side]
+    out = {'body': dict(img=crop_part(r, body_m)[0], o=crop_part(r, body_m)[1])}
+    for side in ('L', 'R'):
+        img, o = crop_part(r, res['arm' + side][0])
+        out['arm' + side] = dict(img=img, o=o, bones=res['armb' + side])
+        # нога: продлеваем штанину вверх под пальто (копия строки legy0+8)
+        lg = r.copy()
+        for y in range(legy0 - 26, legy0 + 10): lg[y, :, :] = r[legy0 + 14, :, :]
+        lm = (legs[side] & (yy >= legy0 + 10)) | ((yy >= legy0 - 26) & (yy < legy0 + 10) & (xx >= legx[side][0]) & (xx < legx[side][1]) & (lg[..., 3] > 0))
+        img, o = crop_part(lg, lm)
+        xm = (legx[side][0] + legx[side][1]) / 2
+        out['leg' + side] = dict(img=img, o=o, bones=[(xm, legy0 - 14), (xm, (legy0 + foot) / 2 - 6), (xm, foot - 30)])
+    return out, foot, cx
+
+FB = {
+    'f': fb_parts('front.png', {'L': ((233, 192), (216, 296)), 'R': ((309, 192), (327, 296))}, {'L': (215, 271), 'R': (271, 332)}, 366, 271),
+    'b': fb_parts('back.png', {'L': ((232, 192), (215, 295)), 'R': ((301, 192), (322, 297))}, {'L': (215, 270), 'R': (270, 330)}, 364, 270),
+}
 
 out = {'U': U, 'scale': SCALE, 'rig': {'shoulder': wpt(SH), 'elbow': wpt(EL), 'wrist': wpt(WR), 'hip': wpt(HIP), 'knee': wpt(KN), 'ankle': wpt(AN), 'neck': wpt(NECK)}, 'players': []}
 os.makedirs(os.path.join(OUT, 'art', 'hero'), exist_ok=True)
 VARIANTS = [None, ((88, 89, 97), (226, 178, 58))]
 for vi, var in enumerate(VARIANTS):
     P = {}
-    for name, d in list(parts.items()) + [('front', front), ('back', back)]:
+    items = list(parts.items())
+    for v, (fp, foot, cx) in FB.items():
+        for k, d in fp.items(): items.append((v + '_' + k, dict(d, foot=foot, cx=cx)))
+    for name, d in items:
         img = d['img'] if var is None else recolor(d['img'], *var)
         im, png = to_png(img)
         im.save(os.path.join(OUT, 'art', 'hero', f'p{vi}_{name}.png'))
-        e = {'png': base64.b64encode(png).decode(), 'w': round(im.width / 2, 2), 'h': round(im.height / 2, 2), 'o': wpt(d['o'])}
-        if 'pivot' in d: e['pivot'] = wpt(d['pivot'])
-        if 'bones' in d: e['bones'] = [wpt(b) for b in d['bones']]
-        if 'foot' in d: e['o'] = [round((d['o'][0] - (d['o'][0] + d['img'].shape[1] / 2)) * U, 2), round((d['o'][1] - d['foot']) * U, 2)]
+        if 'foot' in d:
+            fw = lambda p: [round((p[0] - d['cx']) * U, 2), round((p[1] - d['foot']) * U, 2)]
+        else:
+            fw = wpt
+        e = {'png': base64.b64encode(png).decode(), 'w': round(im.width / 2, 2), 'h': round(im.height / 2, 2), 'o': fw(d['o'])}
+        if 'pivot' in d: e['pivot'] = fw(d['pivot'])
+        if 'bones' in d: e['bones'] = [fw(b) for b in d['bones']]
         P[name] = e
     out['players'].append(P)
 js = "'use strict';\n// Сгенерировано tools/hero/extract.py из видео-разворота героя\nconst HERO = " + json.dumps(out) + ';\n'
