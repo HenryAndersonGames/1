@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="680" viewBox="0 0 300 340">
+<rect width="300" height="340" fill="#fff"/>
+<g stroke="#141214" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round">
+<!-- тень на земле -->
+<ellipse cx="152" cy="318" rx="78" ry="8" fill="#e6e4e0" stroke="none"/>
+<!-- светлячки -->
+<g stroke="none"><circle cx="40" cy="128" r="9" fill="#ffe9a0" opacity=".5"/><circle cx="40" cy="128" r="3.5" fill="#fff4c8"/>
+<circle cx="236" cy="70" r="7" fill="#ffe9a0" opacity=".5"/><circle cx="236" cy="70" r="2.8" fill="#fff4c8"/></g>
+<!-- плащ сзади -->
+<path d="M100 118 Q62 190 52 284 L76 276 L88 296 L104 280 L124 298 L150 286 L176 298 L196 280 L214 296 L226 276 L250 284 Q240 190 202 118 Z" fill="#b5532f"/>
+<path d="M202 118 Q240 190 250 284 L226 276 L214 296 L206 287 Q214 200 186 124 Z" fill="#8a3a20" stroke="none"/>
+<path d="M90 160 Q76 220 74 272 M220 170 Q232 220 236 270 M100 200 Q94 240 96 286" fill="none" stroke-width="2.2"/>
+<path d="M66 230 L84 226 L86 244 L68 248 Z" fill="#cf7a4a" stroke-width="2.4"/>
+<path d="M69 232 l3 3 M75 230 l3 3 M80 229 l3 3" stroke-width="1.6"/>
+<!-- ноги -->
+<path d="M122 262 L122 304 Q120 314 110 314 L102 314 Q98 302 110 298 L140 298 L140 262 Z" fill="#232126"/>
+<path d="M162 262 L162 300 L192 300 Q200 304 196 314 L176 314 Q182 306 182 300 L182 262 Z" fill="#232126"/>
+<!-- туловище -->
+<path d="M110 130 Q98 200 106 270 L196 270 Q204 200 192 130 Z" fill="#5d7182"/>
+<path d="M176 132 Q190 200 184 268 L196 270 Q204 200 192 130 Z" fill="#475666" stroke="none"/>
+<path d="M151 140 L151 216" stroke-width="2.2"/>
+<circle cx="157" cy="160" r="2.6" fill="#d9c49a" stroke-width="1.6"/><circle cx="157" cy="180" r="2.6" fill="#d9c49a" stroke-width="1.6"/><circle cx="157" cy="200" r="2.6" fill="#d9c49a" stroke-width="1.6"/>
+<path d="M114 140 L192 214 L184 220 L108 148 Z" fill="#6e4a30" stroke-width="2.8"/><circle cx="150" cy="176" r="4" fill="#d6b45a" stroke-width="2"/>
+<!-- пояс, сумки, бутылочка -->
+<path d="M104 218 L198 218 L198 234 L104 234 Z" fill="#5a3a26"/>
+<rect x="140" y="215" width="20" height="22" rx="3" fill="#d6b45a"/><rect x="146" y="221" width="8" height="10" fill="#5a3a26" stroke-width="2"/>
+<path d="M112 232 L136 232 L136 254 Q124 260 112 254 Z" fill="#8a6440"/><path d="M112 238 L136 238" stroke-width="2"/>
+<path d="M170 232 L192 232 L192 250 Q181 256 170 250 Z" fill="#8a6440"/>
+<path d="M178 234 L178 242" stroke-width="2"/><path d="M172 244 Q172 262 180 264 Q188 262 188 244 Z" fill="#7fc0b4"/><rect x="176" y="238" width="8" height="6" fill="#5a3a26" stroke-width="2"/>
+<!-- правая рука на сумке -->
+<path d="M190 138 Q214 170 206 212 L190 214 Q194 180 180 150 Z" fill="#b5532f"/>
+<circle cx="198" cy="218" r="9" fill="#3a3a42"/>
+<!-- посох с фонарём -->
+<path d="M84 306 Q90 220 78 150 Q70 100 80 64 Q86 46 72 40 Q58 38 58 52" fill="none" stroke-width="9"/>
+<path d="M84 306 Q90 220 78 150 Q70 100 80 64 Q86 46 72 40 Q58 38 58 52" fill="none" stroke="#8a6440" stroke-width="4.6"/>
+<path d="M58 52 L58 70" stroke-width="2.4"/>
+<circle cx="58" cy="92" r="26" fill="#fff2b8" stroke="none" opacity=".55"/>
+<path d="M50 70 L66 70 L68 76 L48 76 Z" fill="#3a3a42" stroke-width="2.6"/>
+<path d="M48 76 L68 76 L66 106 L50 106 Z" fill="#f6d86a"/>
+<path d="M58 76 L58 106 M48 90 L68 90" stroke-width="2"/>
+<path d="M46 106 L70 106 L68 112 L48 112 Z" fill="#3a3a42" stroke-width="2.6"/>
+<g stroke-width="1.8"><path d="M26 68 Q18 58 22 52 Q30 56 30 66 Z" fill="#e2cfa2"/><path d="M34 68 Q42 58 38 52 Q30 56 30 66 Z" fill="#e2cfa2"/><path d="M30 60 L30 72" stroke-width="2.4"/></g>
+<!-- левая рука держит посох -->
+<path d="M112 136 Q84 158 76 192 L92 200 Q102 170 122 152 Z" fill="#b5532f"/>
+<circle cx="81" cy="196" r="10" fill="#3a3a42"/><path d="M75 192 Q81 189 87 192" stroke-width="2"/>
+<!-- накидка на плечах -->
+<path d="M92 130 Q150 172 210 130 Q206 104 151 98 Q96 104 92 130 Z" fill="#c9653a"/>
+<path d="M170 106 Q206 112 210 130 Q190 146 168 152 Q186 132 170 106 Z" fill="#a24a28" stroke="none"/>
+<path d="M98 138 L104 146 L110 140 L118 150 L126 144 L134 154 L142 147 L151 156 L160 147 L168 154 L176 144 L184 150 L192 140 L198 146 L204 138" fill="none" stroke-width="2.6"/>
+<!-- голова: капюшон и тёмное лицо -->
+<path d="M106 102 Q100 40 151 32 Q202 40 196 102 Q190 120 151 122 Q112 120 106 102 Z" fill="#b5532f"/>
+<path d="M176 40 Q202 52 196 102 Q190 116 172 120 Q188 92 176 40 Z" fill="#8a3a20" stroke="none"/>
+<path d="M122 98 Q118 58 151 54 Q184 58 180 98 Q176 112 151 114 Q126 112 122 98 Z" fill="#2c2833"/>
+<!-- глаза -->
+<ellipse cx="139" cy="88" rx="7.5" ry="9" fill="#f4d35e" stroke-width="2.6"/>
+<ellipse cx="164" cy="88" rx="7.5" ry="9" fill="#f4d35e" stroke-width="2.6"/>
+<circle cx="141" cy="85" r="2.4" fill="#fff" stroke="none"/><circle cx="166" cy="85" r="2.4" fill="#fff" stroke="none"/>
+<!-- пушистые усики-антенны мотылька -->
+<path d="M136 40 Q122 10 98 6 Q112 22 120 40 Q126 44 136 40 Z" fill="#e2cfa2"/>
+<path d="M166 40 Q180 10 204 6 Q190 22 182 40 Q176 44 166 40 Z" fill="#e2cfa2"/>
+<path d="M104 10 L110 18 M110 8 L114 18 M116 10 L118 22 M122 14 L122 26 M128 22 L126 32" stroke-width="1.6"/>
+<path d="M198 10 L192 18 M192 8 L188 18 M186 10 L184 22 M180 14 L180 26 M174 22 L176 32" stroke-width="1.6"/>
+<!-- заплатка на капюшоне -->
+<path d="M114 64 L128 60 L130 74 L116 78 Z" fill="#6b7f4a" stroke-width="2.4"/>
+<path d="M117 66 l3 3 M122 64 l3 3" stroke-width="1.4"/>
+</g>
+</svg>
