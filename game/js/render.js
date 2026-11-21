@@ -22,7 +22,8 @@ function resize() {
 
 function worldTransform(ctx, k = 1) {
   const v = viewSize(G.cam.zoom);
-  const sx = G.shake ? rand(-G.shake, G.shake) * 0.5 : 0, sy = G.shake ? rand(-G.shake, G.shake) * 0.5 : 0;
+  let sx = G.shake ? rand(-G.shake, G.shake) * 0.5 : 0, sy = G.shake ? rand(-G.shake, G.shake) * 0.5 : 0;
+  if (G.camKick) { const k = G.camKick.t / 0.12; sx -= G.camKick.x * k; sy -= G.camKick.y * k; }
   const s = v.scale * k;
   ctx.setTransform(s, 0, 0, s, (Render.W / 2 - (G.cam.x + sx) * v.scale) * k, (Render.H / 2 - (G.cam.y + sy) * v.scale) * k);
   return v;
@@ -294,6 +295,73 @@ function drawWeapon(ctx, p, meta, bob) {
   ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang - Math.PI / 2);
   ctx.drawImage(A.arm.c, -A.arm.ax, -A.arm.ay, A.arm.w, A.arm.h); ctx.restore();
 }
+// ----- Удар: 7 кадров, оружие в руке, смазанный след (smear), сжатие-растяжение -----
+function attackFrame(p) {
+  const a = p.atk;
+  if (a.gun) { const q = p.t / a.dur; return { k: q < 0.25 ? 2 : q < 0.5 ? 3 : q < 0.75 ? 5 : 6, ph: 'r', q }; }
+  if (p.t < a.wind) { const q = p.t / a.wind; return { k: q < 0.45 ? 0 : 1, ph: 'w', q }; }
+  const t2 = p.t - a.wind;
+  if (t2 < a.act) { const q = t2 / a.act, f = Math.min(2.999, q * 3); return { k: 2 + Math.floor(f), ph: 'a', q, f }; }
+  const q = (t2 - a.act) / Math.max(0.01, a.rec);
+  return { k: q < 0.45 ? 5 : 6, ph: 'r', q };
+}
+function weaponLen(p) { if (p.weapon.type === 'fists') return 6; const w = Art.s['w_' + p.weapon.type]; return w.w - w.ax; }
+// положение кисти и угол оружия с плавной интерполяцией между кадрами (u — дробный номер кадра)
+function handAt(fr, u, fl, px, py) {
+  const i = clamp(Math.floor(u), 0, fr.length - 2), t = clamp(u - i, 0, 1), A = fr[i], B = fr[i + 1];
+  const hx = lerp(A.x, B.x, t), hy = lerp(A.y, B.y, t), wa = lerp(A.wa, B.wa, t) * Math.PI / 180;
+  return { x: px + fl * hx, y: py + hy, a: fl > 0 ? wa : Math.PI - wa, deg: lerp(A.wa, B.wa, t) };
+}
+function drawSmear(ctx, p, fr, fl, uFrom, uTo, alpha) {
+  const L = weaponLen(p) + 6, n = 10, outer = [], inner = [];
+  for (let k = 0; k <= n; k++) {
+    const u = lerp(uFrom, uTo, k / n), h = handAt(fr, u, fl, p.x, p.y);
+    const w = Math.pow(k / n, 1.4);
+    outer.push([h.x + Math.cos(h.a) * L, h.y + Math.sin(h.a) * L]);
+    inner.push([h.x + Math.cos(h.a) * L * lerp(0.92, 0.3, w), h.y + Math.sin(h.a) * L * lerp(0.92, 0.3, w)]);
+  }
+  ctx.beginPath(); ctx.moveTo(outer[0][0], outer[0][1]);
+  for (const q of outer) ctx.lineTo(q[0], q[1]);
+  for (let k = inner.length - 1; k >= 0; k--) ctx.lineTo(inner[k][0], inner[k][1]);
+  ctx.closePath();
+  ctx.fillStyle = `rgba(255,250,232,${alpha})`; ctx.fill();
+  ctx.strokeStyle = `rgba(42,31,26,${alpha * 0.55})`; ctx.lineWidth = 1.4; ctx.stroke();
+}
+function drawAttack(ctx, p, A) {
+  const a = p.atk, fl = Math.cos(p.face) < 0 ? -1 : 1, F = attackFrame(p);
+  const name = a.anim, fr = ART_META.anims[name], s = A['a_' + name + F.k];
+  const M = a.M || {};
+  // сжатие на замахе, растяжение в ударе
+  let sx = 1, sy = 1, y = p.y;
+  if (F.ph === 'w') { const k = F.q; sx = 1 - 0.05 * k; sy = 1 + 0.05 * k; }
+  else if (F.ph === 'a') { sx = 1.07; sy = 0.95; }
+  else { const k = 1 - F.q; sx = 1 + 0.04 * k; sy = 1 - 0.03 * k; }
+  if (name === 'leap') { const tt = clamp(p.t / (a.wind + a.act), 0, 1); y -= Math.sin(tt * Math.PI) * 30; }
+  const spin = M.pose === 'spin' && F.ph === 'a';
+  const flipNow = spin ? (Math.floor(F.q * (M.hits || 1) * 4) % 2 ? -fl : fl) : fl;
+  const u = F.ph === 'a' ? 2 + F.q * 2 : F.k;
+  const h = handAt(fr, u, flipNow, p.x, y);
+  const behind = h.deg < -112 || h.deg > 112;
+  // след удара
+  if (!a.gun && p.weapon.type !== 'fists') {
+    if (spin) { ctx.strokeStyle = `rgba(255,250,232,${0.75 * (1 - F.q * 0.5)})`; ctx.lineWidth = 12; ctx.beginPath(); ctx.ellipse(p.x, y - 52, weaponLen(p) + 26, (weaponLen(p) + 26) * 0.55, 0, 0, TAU); ctx.stroke(); }
+    else if (F.ph === 'a') drawSmear(ctx, p, fr, flipNow, 1.4, u, 0.85);
+    else if (F.ph === 'r' && F.q < 0.6) drawSmear(ctx, p, fr, flipNow, lerp(1.6, 3.6, F.q / 0.6), 4, 0.85 * (1 - F.q / 0.6));
+  } else if (!a.gun && F.ph === 'a') { // кулак — линии скорости
+    ctx.strokeStyle = 'rgba(255,250,232,0.8)'; ctx.lineWidth = 2.5;
+    for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(h.x - fl * (14 + 4 * Math.abs(k)), h.y + k * 5); ctx.lineTo(h.x - fl * 30, h.y + k * 7); ctx.stroke(); }
+  }
+  const wpn = p.weapon.type !== 'fists' ? Art.s['w_' + p.weapon.type] : null;
+  const drawW = () => { if (!wpn) return; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.a); if (Math.cos(h.a) < 0) ctx.scale(1, -1); ctx.drawImage(wpn.c, -wpn.ax, -wpn.ay, wpn.w, wpn.h); ctx.restore(); };
+  if (behind) drawW();
+  ctx.save(); ctx.translate(p.x, y); ctx.scale(flipNow * sx, sy); ctx.drawImage(s.c, -s.ax, -s.ay, s.w, s.h); ctx.restore();
+  if (!behind) drawW();
+  // кисть поверх рукояти
+  ctx.fillStyle = ART_META.skin[p.i]; ctx.strokeStyle = OL; ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.arc(h.x, h.y, 2.8, 0, TAU); ctx.fill(); ctx.stroke();
+  if (a.gun && F.q < 0.25) { G.flashes.length; ctx.fillStyle = '#fff2b0'; ctx.beginPath(); const mx = h.x + Math.cos(h.a) * (weaponLen(p) + 4), my = h.y + Math.sin(h.a) * (weaponLen(p) + 4); for (let k = 0; k < 10; k++) { const r = k % 2 ? 4 : 10, an = h.a + k / 10 * TAU; ctx.lineTo(mx + Math.cos(an) * r, my + Math.sin(an) * r); } ctx.fill(); }
+}
+
 function drawPlayer(ctx, p) {
   const A = Art.players[p.i];
   if (p.state === 'dead') {
@@ -305,6 +373,10 @@ function drawPlayer(ctx, p) {
   }
   const flip = Math.cos(p.face) < 0;
   if (p.state === 'downed') { spr(ctx, A.down, p.x, p.y, flip); return; }
+  if ((p.state === 'atk' || (p.state === 'light' && p.atk && p.atk.gun)) && !p.held) {
+    if (p.inv > 0 && Math.floor(G.t * 20) % 2) ctx.globalAlpha = 0.55;
+    drawAttack(ctx, p, A); ctx.globalAlpha = 1; return;
+  }
   const pose = playerPose(p);
   let s, meta = { bob: 0, lean: 0, hy: 0 }, bob = 0;
   if (p.held && p.held.kind === 'furn' && !pose) {
@@ -361,7 +433,8 @@ function drawEnemy(ctx, e) {
   if (e.frozen > 0) s = s.fz || (s.fz = recolor(s, '#a8d8ff', 0.55));
   else if (e.flash > 0) s = flashOf(s);
   if (e.hitT > 0 && e.state !== 'cling') {
-    ctx.save(); ctx.translate(e.x, y); ctx.rotate((flip ? 1 : -1) * 0.12 * e.hitT / 0.15); ctx.scale(flip ? -1 : 1, 1); ctx.drawImage(s.c, -s.ax, -s.ay, s.w, s.h); ctx.restore();
+    const k = e.hitT / 0.18;
+    ctx.save(); ctx.translate(e.x, y); ctx.rotate((flip ? 1 : -1) * 0.14 * k); ctx.scale((flip ? -1 : 1) * (1 + 0.1 * k), 1 - 0.1 * k); ctx.drawImage(s.c, -s.ax, -s.ay, s.w, s.h); ctx.restore();
   } else spr(ctx, s, e.x, y, flip);
   if (windy && e.flash <= 0 && Math.floor(G.t * 16) % 2) spr(ctx, redOf(s), e.x, y, flip);
   if (e.stun > 0 || e.frozen > 0) {
@@ -411,6 +484,22 @@ function drawLight(ctx, dk) {
   glow(World.fire.x, World.fire.y - 10, 260 * fl, '255,140,40', 0.22 * dk);
   for (const f of G.fires) glow(f.x, f.y, f.r * 2, '255,120,30', 0.25 * dk);
   ctx.globalCompositeOperation = 'source-over';
+}
+
+// пузырь подсказки: «держи A: поднять» → [держи] (A) поднять
+function drawHint(ctx, text, x, y) {
+  const m = text.match(/^(держи )?([^:\s]+): (.*)$/);
+  ctx.font = `bold 13px ${FONT}`;
+  const pre = m && m[1] ? 'держи ' : '', b = m ? m[2] : null, rest = m ? m[3] : text;
+  const wPre = pre ? ctx.measureText(pre).width : 0, wB = b ? (b.length > 2 ? ctx.measureText(b).width + 12 : 20) : 0, wR = ctx.measureText(rest).width;
+  const w = wPre + wB + wR + 22, h = 24, x0 = x - w / 2;
+  rrect(ctx, x0, y - h / 2, w, h, 12); ctx.fillStyle = 'rgba(24,18,13,0.88)'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 6, y + h / 2 - 1); ctx.lineTo(x, y + h / 2 + 7); ctx.lineTo(x + 6, y + h / 2 - 1); ctx.fillStyle = 'rgba(24,18,13,0.88)'; ctx.fill();
+  let cx = x0 + 11;
+  ctx.textAlign = 'left'; ctx.fillStyle = '#c8bca0'; if (pre) { ctx.fillText(pre, cx, y + 5); cx += wPre; }
+  if (b) { if (b.length <= 2) glyph(ctx, b, cx + 9, y, 9), ctx.font = `bold 13px ${FONT}`; else { rrect(ctx, cx, y - 9, wB - 4, 18, 5); ctx.fillStyle = '#6a5e50'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.stroke(); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(b, cx + (wB - 4) / 2, y + 5); ctx.textAlign = 'left'; } cx += wB; }
+  ctx.fillStyle = '#f2e6c8'; ctx.font = `bold 13px ${FONT}`; ctx.textAlign = 'left'; ctx.fillText(rest, cx, y + 5);
+  ctx.textAlign = 'center';
 }
 
 // ---------- Поверх темноты ----------
@@ -487,18 +576,31 @@ function drawOverlay(ctx, dk) {
     }
     if (p.search) { ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(p.x, p.y - 128, 12, 0, TAU); ctx.stroke(); ctx.strokeStyle = '#e8d08a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(p.x, p.y - 128, 12, -Math.PI / 2, -Math.PI / 2 + TAU * p.search.t / 1.2); ctx.stroke(); }
     if (p.state === 'atk' && p.comboN >= 2 && p.atk.hitsDone > 0) { ctx.font = `bold 13px ${FONT}`; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(p.atk.M.name, p.x, top - 14); ctx.fillStyle = '#ffe8a8'; ctx.fillText(p.atk.M.name, p.x, top - 14); }
-    else if (p.hint) {
-      ctx.font = `bold 13px ${FONT}`;
-      const w = ctx.measureText(p.hint).width + 12;
-      ctx.fillStyle = 'rgba(10,8,6,0.7)'; ctx.fillRect(p.x - w / 2, top - 32, w, 19);
-      ctx.fillStyle = '#f0e4c4'; ctx.fillText(p.hint, p.x, top - 18);
-    }
+    else if (p.hint) drawHint(ctx, p.hint, p.x, top - 20);
     if (!p.held && p.state === 'normal' && !p.hint && Input.ctrls[p.i].down.build) {
       const b = barricadeSpec(p);
       ctx.strokeStyle = canPlace(b.x, b.y, b.w, b.h, null, false) ? 'rgba(160,255,140,0.7)' : 'rgba(255,90,70,0.7)';
       ctx.lineWidth = 2; ctx.strokeRect(b.x, b.y, b.w, b.h);
     }
   }
+  for (const sp of G.sparks) {
+    const k = sp.t / sp.max, r = sp.r * (1.2 - k * 0.5);
+    ctx.save(); ctx.translate(sp.x, sp.y); ctx.rotate(sp.a);
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) { const rr = i % 2 ? r * 0.35 : r * (i % 4 ? 0.8 : 1.15), an = i / 16 * TAU; ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr * 0.8); }
+    ctx.closePath(); ctx.globalAlpha = Math.min(1, k * 1.6);
+    ctx.fillStyle = '#fffbe8'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#ffd860'; ctx.beginPath(); ctx.arc(0, 0, r * 0.28, 0, TAU); ctx.fill();
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+  ctx.textAlign = 'center';
+  for (const n of G.dmgNums) {
+    const sz = n.big ? 22 : 16;
+    ctx.globalAlpha = Math.min(1, n.t * 3);
+    ctx.font = `900 ${sz}px ${FONT}`; ctx.lineWidth = 4; ctx.strokeStyle = OL; ctx.strokeText(n.v, n.x, n.y);
+    ctx.fillStyle = n.big ? '#ffd860' : '#fffbe8'; ctx.fillText(n.v, n.x, n.y);
+  }
+  ctx.globalAlpha = 1;
   for (const t of G.texts) {
     ctx.globalAlpha = Math.min(1, t.t * 2);
     ctx.font = `bold ${t.size}px ${FONT}`;
@@ -508,34 +610,47 @@ function drawOverlay(ctx, dk) {
   ctx.globalAlpha = 1;
 }
 
-// ---------- Интерфейс ----------
-function bar(ctx, x, y, w, h, k, col, bg = 'rgba(0,0,0,0.6)') {
-  ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = col; ctx.fillRect(x, y, w * clamp(k, 0, 1), h);
-  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(x, y, w * clamp(k, 0, 1), Math.max(1, h * 0.3));
-  ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
+// ---------- Интерфейс (в духе Don't Starve: круглые шкалы, циферблат дня, кнопки-медальоны) ----------
+const BTNCOL = { A: '#5fb84a', B: '#d84a3a', X: '#3a7ad8', Y: '#e0b030', LB: '#8a8070', RB: '#8a8070', RT: '#8a8070', LT: '#8a8070' };
+function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function bar(ctx, x, y, w, h, k, col, bg = 'rgba(0,0,0,0.55)') {
+  rrect(ctx, x, y, w, h, h / 2); ctx.fillStyle = bg; ctx.fill();
+  if (k > 0) { ctx.save(); rrect(ctx, x, y, w, h, h / 2); ctx.clip(); ctx.fillStyle = col; ctx.fillRect(x, y, w * clamp(k, 0, 1), h); ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(x, y, w * clamp(k, 0, 1), h * 0.35); ctx.restore(); }
+  rrect(ctx, x, y, w, h, h / 2); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke();
 }
-
 function panel(ctx, x, y, w, h) {
-  ctx.fillStyle = 'rgba(24,18,13,0.9)'; ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = OL; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(150,118,80,0.55)'; ctx.lineWidth = 1.2; ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
-  ctx.fillStyle = '#8a7656';
-  for (const [cx, cy] of [[x + 4, y + 4], [x + w - 4, y + 4], [x + 4, y + h - 4], [x + w - 4, y + h - 4]]) {
-    ctx.beginPath(); ctx.arc(cx, cy, 2.4, 0, TAU); ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 1; ctx.stroke();
-  }
+  rrect(ctx, x, y, w, h, 10);
+  const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(46,36,27,0.94)'); g.addColorStop(1, 'rgba(26,20,15,0.94)');
+  ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 3.5; ctx.stroke();
+  rrect(ctx, x + 4, y + 4, w - 8, h - 8, 7); ctx.strokeStyle = 'rgba(176,140,92,0.5)'; ctx.lineWidth = 1.2; ctx.stroke();
 }
-
 function icon(ctx, name, x, y, size) {
-  const s = Art.s[name];
+  const s = Art.s[name]; if (!s) return;
   const k = size / Math.max(s.w, s.h);
   ctx.drawImage(s.c, x - s.w * k / 2, y - s.h * k / 2, s.w * k, s.h * k);
 }
-
 function inkText(ctx, text, x, y, col, size, bold = true, align = 'left') {
   ctx.font = `${bold ? 'bold ' : ''}${size}px ${FONT}`; ctx.textAlign = align;
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(10,7,5,0.9)'; ctx.strokeText(text, x, y);
+  ctx.lineWidth = 3.5; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(10,7,5,0.92)'; ctx.strokeText(text, x, y);
   ctx.fillStyle = col; ctx.fillText(text, x, y);
+}
+function glyph(ctx, b, x, y, r = 9) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = BTNCOL[b] || '#6a5e50'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke();
+  ctx.font = `900 ${b.length > 1 ? r * 0.85 : r * 1.25}px ${FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(b, x, y + r * (b.length > 1 ? 0.32 : 0.45));
+}
+function heartPath(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x, y + s * 0.8); ctx.bezierCurveTo(x - s * 1.3, y - s * 0.1, x - s * 0.7, y - s * 1.1, x, y - s * 0.4); ctx.bezierCurveTo(x + s * 0.7, y - s * 1.1, x + s * 1.3, y - s * 0.1, x, y + s * 0.8); }
+function boltPath(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x + s * 0.2, y - s); ctx.lineTo(x - s * 0.55, y + s * 0.1); ctx.lineTo(x - s * 0.05, y + s * 0.1); ctx.lineTo(x - s * 0.25, y + s); ctx.lineTo(x + s * 0.55, y - s * 0.15); ctx.lineTo(x + s * 0.05, y - s * 0.15); ctx.closePath(); }
+// круглая шкала: заполнение снизу вверх, значок в центре, дуга брони
+function gauge(ctx, x, y, r, k, col, drawIcon, warn, ring) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = '#16110d'; ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(x, y, r - 1, 0, TAU); ctx.clip();
+  const top = y + r - 2 * r * clamp(k, 0, 1);
+  ctx.fillStyle = col; ctx.fillRect(x - r, top, 2 * r, 2 * r);
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(x - r, top, 2 * r, 3);
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.strokeStyle = warn && Math.floor(G.t * 4) % 2 ? '#ff5a3a' : OL; ctx.lineWidth = 3.2; ctx.stroke();
+  if (ring > 0) { ctx.beginPath(); ctx.arc(x, y, r + 4, -Math.PI / 2, -Math.PI / 2 + TAU * ring); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = '#a8c0dc'; ctx.lineWidth = 2.6; ctx.stroke(); }
+  drawIcon(x, y);
 }
 
 function drawHUD(ctx) {
@@ -543,104 +658,100 @@ function drawHUD(ctx) {
   ctx.save(); ctx.scale(u, u);
   const W = Render.W / u;
   ctx.textBaseline = 'alphabetic';
-  for (const p of G.players) drawPlayerPanel(ctx, p, p.i === 0 ? 12 : W - 12 - 330, 12);
-
-  // часы
-  const cw = 300, cx = W / 2 - cw / 2;
-  panel(ctx, cx, 8, cw, 56);
-  let label, k, col, ic;
-  if (G.phase === 'day') { label = `День ${G.day}`; k = G.phaseT / DAY_LEN; col = '#e6c76a'; ic = 'icon_sun'; }
-  else if (G.phase === 'dusk') { label = `Сумерки · ${Math.ceil(DUSK_LEN - G.phaseT)} с`; k = G.phaseT / DUSK_LEN; col = '#e08a4a'; ic = 'icon_sun'; }
-  else { label = `Ночь ${G.day} · ${Math.ceil(NIGHT_LEN - G.phaseT)} с`; k = G.phaseT / NIGHT_LEN; col = '#7a8ad6'; ic = 'icon_moon'; }
-  icon(ctx, ic, cx + 30, 36, 34);
-  inkText(ctx, label, cx + 54, 32, '#f2e6c8', 17);
-  bar(ctx, cx + 54, 41, cw - 70, 9, k, col);
-  const gn = World.gen;
-  inkText(ctx, `⚡${gn.fuel}${gn.on ? ' ВКЛ' : ''}`, cx + cw - 14, 30, gn.on ? '#b8ff9a' : '#a89c80', 12, true, 'right');
-
+  for (const p of G.players) drawPlayerHUD(ctx, p, p.i === 0 ? 14 : W - 14, p.i === 0 ? 1 : -1);
+  drawClock(ctx, W / 2, 50);
   // ресурсы
   const items = [['wood', G.team.wood], ['scrap', G.team.scrap], ['cloth', G.team.cloth], ['fuel', G.team.fuel], ['ammo', G.team.ammo], ['food', G.team.food], ['band', G.team.band]];
-  const rw = items.length * 74 + 16, rx = W / 2 - rw / 2, ry = 720 - 50;
-  panel(ctx, rx, ry, rw, 40);
-  items.forEach(([n, v], i) => { icon(ctx, n, rx + 26 + i * 74, ry + 20, 24); inkText(ctx, String(v), rx + 44 + i * 74, ry + 27, n === 'band' ? '#9fe39a' : RES[n].col, 16); });
-
+  const rw = items.length * 66 + 18, rx = W / 2 - rw / 2, ry = 720 - 48;
+  panel(ctx, rx, ry, rw, 38);
+  items.forEach(([n, v], i) => { const x = rx + 30 + i * 66; icon(ctx, n, x, ry + 19, 24); inkText(ctx, String(v), x + 16, ry + 26, v > 0 ? '#f2e6c8' : '#8a7e68', 16); });
   // Титан
   const titan = G.enemies.find((e) => e.type === 'titan' && e.state !== 'dying');
-  if (titan) {
-    const bw = 420, bx = W / 2 - bw / 2;
-    inkText(ctx, 'ТИТАН', W / 2, 88, '#ff8a6a', 15, true, 'center');
-    bar(ctx, bx, 94, bw, 12, titan.hp / titan.maxHp, '#c43e30');
-  }
-  // сообщения
-  let my = titan ? 130 : 98;
+  let my = 130;
+  if (titan) { const bw = 440, bx = W / 2 - bw / 2; inkText(ctx, 'ТИТАН', W / 2, 118, '#ff8a6a', 15, true, 'center'); bar(ctx, bx, 124, bw, 13, titan.hp / titan.maxHp, '#c43e30'); my = 162; }
+  // сообщения — лента
   for (const m of G.msgs) {
     ctx.globalAlpha = Math.min(1, m.t);
-    ctx.font = `bold 18px ${FONT}`; ctx.textAlign = 'center';
-    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(m.text, W / 2, my);
-    ctx.fillStyle = m.col; ctx.fillText(m.text, W / 2, my);
-    my += 26;
+    ctx.font = `bold 17px ${FONT}`;
+    const w = ctx.measureText(m.text).width + 34;
+    rrect(ctx, W / 2 - w / 2, my - 19, w, 26, 13); ctx.fillStyle = 'rgba(18,13,9,0.78)'; ctx.fill(); ctx.strokeStyle = 'rgba(176,140,92,0.45)'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.fillStyle = m.col; ctx.fillText(m.text, W / 2, my);
+    my += 32;
   }
   ctx.globalAlpha = 1;
-  if (G.showFps) {
-    ctx.textAlign = 'left'; ctx.font = `12px ${FONT}`; ctx.fillStyle = 'rgba(240,230,200,0.6)';
-    ctx.fillText(`FPS ${Render.fps.toFixed(0)} · монстров ${G.enemies.length} · ${Render.W}x${Render.H} · F2 качество · F3 скрыть`, 14, 712);
-  }
+  if (G.showFps) { ctx.textAlign = 'left'; ctx.font = `11px ${FONT}`; ctx.fillStyle = 'rgba(240,230,200,0.45)'; ctx.fillText(`FPS ${Render.fps.toFixed(0)} · монстров ${G.enemies.length} · F2 качество · F3 скрыть`, 12, 714); }
   ctx.restore();
 }
 
-function slotBox(ctx, x, y, s, iconName, label, cdK, keyName, dim) {
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x, y, s, s);
-  if (iconName) { if (dim) ctx.globalAlpha = 0.35; icon(ctx, iconName, x + s / 2, y + s / 2, s - 4); ctx.globalAlpha = 1; }
-  if (cdK > 0) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x, y + s * (1 - cdK), s, s * cdK); }
-  ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.strokeRect(x, y, s, s);
-  if (keyName) inkText(ctx, keyName, x + s - 2, y + s - 2, '#f2e6c8', 10, true, 'right');
+function drawClock(ctx, x, y) {
+  const R = 36, total = DAY_LEN + DUSK_LEN + NIGHT_LEN, a0 = -Math.PI / 2;
+  const segs = [[DAY_LEN, '#e2c063'], [DUSK_LEN, '#d47c42'], [NIGHT_LEN, '#3e4a7c']];
+  ctx.beginPath(); ctx.arc(x, y, R + 6, 0, TAU); ctx.fillStyle = '#2a2017'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 3.5; ctx.stroke();
+  let a = a0;
+  for (const [len, col] of segs) { const b = a + TAU * len / total; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, R, a, b); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 1.5; ctx.stroke(); a = b; }
+  const elapsed = G.phase === 'day' ? G.phaseT : G.phase === 'dusk' ? DAY_LEN + G.phaseT : DAY_LEN + DUSK_LEN + G.phaseT;
+  const ha = a0 + TAU * elapsed / total;
+  ctx.beginPath(); ctx.arc(x, y, R * 0.55, 0, TAU); ctx.fillStyle = '#2a2017'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.strokeStyle = OL; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x + Math.cos(ha) * R * 0.5, y + Math.sin(ha) * R * 0.5); ctx.lineTo(x + Math.cos(ha) * (R + 2), y + Math.sin(ha) * (R + 2)); ctx.stroke();
+  ctx.strokeStyle = '#f6eed6'; ctx.lineWidth = 3; ctx.stroke();
+  inkText(ctx, String(G.day), x, y + 7, '#f2e6c8', 20, true, 'center');
+  const lbl = G.phase === 'day' ? 'День' : G.phase === 'dusk' ? 'Сумерки' : 'Ночь';
+  inkText(ctx, lbl, x, y + R + 24, G.phase === 'night' ? '#a8b4ff' : G.phase === 'dusk' ? '#ffb27a' : '#f2e6c8', 14, true, 'center');
+  const gn = World.gen;
+  if (gn.fuel > 0 || gn.on) { ctx.save(); boltPath(ctx, x + R + 18, y - R + 8, 9); ctx.fillStyle = gn.on ? '#b8ff9a' : '#c9b06a'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke(); ctx.restore(); inkText(ctx, String(gn.fuel), x + R + 30, y - R + 14, '#f2e6c8', 12); }
 }
 
-function drawPlayerPanel(ctx, p, x, y) {
-  const pal = PAL[p.i];
-  panel(ctx, x, y, 330, 104);
-  const px = x + 46, py = y + 50;
-  ctx.save(); ctx.beginPath(); ctx.arc(px, py, 33, 0, TAU);
-  ctx.fillStyle = p.state === 'dead' ? '#2a1a16' : '#3a3024'; ctx.fill(); ctx.clip();
+function drawPlayerHUD(ctx, p, ax, dir) {
+  const pal = PAL[p.i], X = (dx) => ax + dir * dx;
+  const px = X(42), py = 52;
+  // портрет
+  ctx.beginPath(); ctx.arc(px, py, 36, 0, TAU); ctx.fillStyle = p.state === 'dead' ? '#2a1a16' : '#3a3024'; ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(px, py, 34, 0, TAU); ctx.clip();
   const h = Art.players[p.i].head;
   if (p.state === 'dead' || p.state === 'downed') ctx.globalAlpha = 0.45;
-  ctx.drawImage(h.c, px - h.ax * 2.4, py + 24 - h.ay * 2.4, h.w * 2.4, h.h * 2.4);
+  ctx.save(); ctx.translate(px, 0); ctx.scale(dir, 1); ctx.drawImage(h.c, -h.ax * 2.4, py + 24 - h.ay * 2.4, h.w * 2.4, h.h * 2.4); ctx.restore();
   ctx.restore();
-  ctx.strokeStyle = OL; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(px, py, 33, 0, TAU); ctx.stroke();
-  ctx.strokeStyle = pal.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py, 31, 0, TAU); ctx.stroke();
-  ctx.fillStyle = pal.accent; ctx.beginPath(); ctx.arc(px + 24, py + 24, 11, 0, TAU); ctx.fill();
-  ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke();
-  ctx.fillStyle = '#1a110b'; ctx.font = `bold 12px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText(p.lvl, px + 24, py + 28);
-
-  const bx = x + 90, bw = 160;
-  inkText(ctx, pal.name, bx, y + 24, pal.accent, 15);
-  if (p.clingers.length) inkText(ctx, `ПАРАЗИТ ×${p.clingers.length}`, bx + bw, y + 24, '#ff9a8a', 11, true, 'right');
-  else if (p.pts > 0) inkText(ctx, `★ ${p.pts} [${Input.btn(p.i, 'menu')}]`, bx + bw, y + 24, pal.accent, 12, true, 'right');
-  if (p.state === 'dead') { inkText(ctx, 'Погиб — вернётся на рассвете', bx, y + 56, '#ff8a7a', 13); return; }
-  bar(ctx, bx, y + 32, bw, 14, p.hp / p.maxHp, p.state === 'downed' ? '#7a2a22' : '#c43e30');
-  inkText(ctx, p.state === 'downed' ? `БЕЗ СОЗНАНИЯ ${Math.ceil(p.bleed)}` : `${Math.ceil(p.hp)}/${p.maxHp}`, bx + 5, y + 44, '#fff', 11);
-  bar(ctx, bx, y + 50, bw, 7, p.st / 100, '#d6c26a');
-  bar(ctx, bx, y + 61, bw * 0.48, 5, p.food / 100, p.food < 25 ? '#e06a3a' : '#e8b08a');
-  bar(ctx, bx + bw * 0.52, y + 61, bw * 0.48, 5, p.armor / 120, '#9ab0c8');
-  bar(ctx, bx, y + 69, bw, 3, p.xp / xpNeed(p.lvl), '#8a7ad6');
+  ctx.beginPath(); ctx.arc(px, py, 36, 0, TAU); ctx.strokeStyle = OL; ctx.lineWidth = 4; ctx.stroke();
+  // опыт — дуга вокруг портрета
+  ctx.beginPath(); ctx.arc(px, py, 36, -Math.PI / 2, -Math.PI / 2 + TAU * p.xp / xpNeed(p.lvl)); ctx.strokeStyle = pal.accent; ctx.lineWidth = 3; ctx.stroke();
+  ctx.beginPath(); ctx.arc(px + dir * 26, py + 26, 12, 0, TAU); ctx.fillStyle = pal.accent; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.5; ctx.stroke();
+  inkText(ctx, String(p.lvl), px + dir * 26, py + 31, '#fff', 13, true, 'center');
+  inkText(ctx, pal.name, px, py + 54, pal.accent, 13, true, 'center');
+  if (p.pts > 0) inkText(ctx, `★${p.pts}`, px - dir * 30, py - 22, '#ffe08a', 14, true, 'center');
+  if (p.state === 'dead') { inkText(ctx, 'Погиб · вернётся на рассвете', X(92), py + 6, '#ff8a7a', 14, true, dir > 0 ? 'left' : 'right'); return; }
+  // шкалы
+  const gx = (n) => X(110 + n * 54);
+  gauge(ctx, gx(0), 44, 23, p.hp / p.maxHp, p.state === 'downed' ? '#6a2a22' : '#c43a2c',
+    (x, y) => { heartPath(ctx, x, y + 1, 9); ctx.fillStyle = '#ffe2d6'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke(); }, p.hp < 30, p.armor / 120);
+  gauge(ctx, gx(1), 44, 19, p.food / 100, '#d08a42', (x, y) => icon(ctx, 'food', x, y, 20), p.food < 20);
+  gauge(ctx, gx(2), 44, 19, p.st / 100, '#d6c04a', (x, y) => { boltPath(ctx, x, y, 9); ctx.fillStyle = '#fff6d0'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.stroke(); });
+  inkText(ctx, p.state === 'downed' ? `${Math.ceil(p.bleed)}с` : String(Math.ceil(p.hp)), gx(0), 82, '#f2e6c8', 12, true, 'center');
+  if (p.clingers.length) inkText(ctx, `ПАРАЗИТ ×${p.clingers.length}`, gx(1), 82, '#ff9a8a', 11, true, 'center');
   // оружие
-  const W = wep(p), wx = x + 258, wy = y + 14;
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(wx, wy, 62, 44); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.strokeRect(wx, wy, 62, 44);
+  const W = wep(p), wx = gx(3) + dir * 6, wy = 44;
+  ctx.beginPath(); ctx.arc(wx, wy, 24, 0, TAU); ctx.fillStyle = '#16110d'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 3.2; ctx.stroke();
   if (p.weapon.type !== 'fists') {
-    const s = Art.s['w_' + p.weapon.type], k = Math.min(56 / s.w, 30 / s.h);
-    ctx.save(); ctx.translate(wx + 31, wy + 20); ctx.rotate(-0.35); ctx.drawImage(s.c, -s.w * k / 2, -s.h * k / 2, s.w * k, s.h * k); ctx.restore();
-    if (W.durab < Infinity) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(wx + 4, wy + 38, 54, 3); ctx.fillStyle = p.weapon.dur / W.durab > 0.3 ? '#b8d080' : '#e06a3a'; ctx.fillRect(wx + 4, wy + 38, 54 * p.weapon.dur / W.durab, 3); }
-  } else inkText(ctx, '✊', wx + 31, wy + 30, '#e0c8a4', 20, true, 'center');
-  ctx.font = `10px ${FONT}`; ctx.fillStyle = '#b8ac90'; ctx.textAlign = 'center'; ctx.fillText(W.gun ? `${W.name} · ${G.team.ammo}` : W.name, wx + 31, wy + 56);
-  // слоты способностей
+    const s = Art.s['w_' + p.weapon.type], k = Math.min(40 / s.w, 22 / s.h);
+    ctx.save(); ctx.translate(wx, wy); ctx.rotate(-0.7); ctx.drawImage(s.c, -s.w * k / 2, -s.h * k / 2, s.w * k, s.h * k); ctx.restore();
+    if (W.durab < Infinity) { const d = p.weapon.dur / W.durab; ctx.beginPath(); ctx.arc(wx, wy, 27, -Math.PI / 2, -Math.PI / 2 + TAU * d); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = d > 0.3 ? '#b8d080' : '#e06a3a'; ctx.lineWidth = 2.6; ctx.stroke(); }
+  } else inkText(ctx, '✊', wx, wy + 8, '#e0c8a4', 22, true, 'center');
+  inkText(ctx, W.gun ? `${W.name} ${G.team.ammo}` : W.name, wx, 82, '#c8bca0', 11, true, 'center');
+  // способности
   for (let k = 0; k < 3; k++) {
-    const id = p.slots[k], sx = bx + k * 40, sy = y + 70;
-    slotBox(ctx, sx, sy + 4, 28, id ? ABIL[id].icon : null, '', id && p.abCd[id] > 0 ? p.abCd[id] / ABIL[id].cd : 0, Input.btn(p.i, 'ab' + (k + 1)));
+    const id = p.slots[k], sx = X(118 + (dir > 0 ? k : 2 - k) * 44), sy = 112;
+    ctx.beginPath(); ctx.arc(sx, sy, 17, 0, TAU); ctx.fillStyle = '#16110d'; ctx.fill();
+    if (id) {
+      const cd = p.abCd[id] > 0 ? p.abCd[id] / ABIL[id].cd : 0;
+      if (cd > 0) ctx.globalAlpha = 0.45;
+      icon(ctx, ABIL[id].icon, sx, sy, 32); ctx.globalAlpha = 1;
+      if (cd > 0) { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.arc(sx, sy, 17, -Math.PI / 2, -Math.PI / 2 + TAU * cd); ctx.closePath(); ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill(); inkText(ctx, Math.ceil(p.abCd[id]), sx, sy + 5, '#fff', 13, true, 'center'); }
+    }
+    ctx.beginPath(); ctx.arc(sx, sy, 17, 0, TAU); ctx.strokeStyle = OL; ctx.lineWidth = 3; ctx.stroke();
+    glyph(ctx, Input.btn(p.i, 'ab' + (k + 1)), sx + dir * 13, sy + 13, 8);
   }
-  if (p.state === 'atk' && p.comboN >= 2) inkText(ctx, `Комбо ×${p.comboN}`, bx + 124, y + 90, '#ffe08a', 13);
-
-  if (p.menu) drawSkillMenu(ctx, p, x, y + 112);
-  if (p.craft) drawCraftMenu(ctx, p, x, y + 112);
+  if (p.state === 'atk' && p.comboN >= 2) inkText(ctx, `Комбо ×${p.comboN}`, X(250), 118, '#ffe08a', 15, true, dir > 0 ? 'left' : 'right');
+  if (p.menu) drawSkillMenu(ctx, p, dir > 0 ? ax : ax - 330, 142);
+  if (p.craft) drawCraftMenu(ctx, p, dir > 0 ? ax : ax - 330, 142);
 }
 
 function drawSkillMenu(ctx, p, x, my) {

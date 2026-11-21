@@ -141,3 +141,15 @@ SKILLS[0].lv[2] = 'Тяжёлый удар сильнее + способност
 SKILLS[1].lv[1] = 'Перекат дальше + способность «Рывок»';
 SKILLS[3].lv = ['Приёмы: «Размашистый», «Выпад», «Пинок», «Шквал»', 'Приёмы: «Апперкот-добивание», «Удар сверху», «Вращение»', 'Приём «Прыжок с ударом»; добивание швыряет врага в других', 'Замах тяжёлого на 40% быстрее + способность «Вихрь»', 'Оглушённые получают двойной урон'];
 SKILLS[4].lv[2] = 'Бинт лечит и союзника + способность «Полевой медик»';
+
+// Какая анимация у приёма (7 кадров из ART_META.anims)
+function animFor(id, M, cls) {
+  if (M.anim) return M.anim;
+  if (cls === 'fists') return 'punch';
+  if (M.pose === 'spin') return 'slash';
+  if (M.pose === 'thrust') return 'thrust';
+  if (M.pose === 'leap') return 'leap';
+  if (id === 'LLH') return 'uppercut';
+  if (M.pose === 'H' || M.pose === 'slam') return 'overhead';
+  return id === 'L2' ? 'chop' : 'slash';
+}

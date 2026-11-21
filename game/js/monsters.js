@@ -20,7 +20,13 @@ function spawnEnemy(type, x, y, night) {
 
 function damageEnemy(e, dmg, src, kb, stun) {
   if (e.dead || e.state === 'dying') return;
-  e.hp -= dmg; e.flash = 0.12; e.hitT = 0.15; e.hidden = false;
+  e.hp -= dmg; e.flash = 0.12; e.hitT = 0.18; e.hidden = false;
+  const by = src.i !== undefined ? src : src.owner && src.owner.i !== undefined ? src.owner : null;
+  if (by && dmg >= 1) {
+    const h = EDEF[e.type].h * 0.5, big = dmg >= 30;
+    G.sparks.push({ x: e.x + rand(-6, 6), y: e.y - h + rand(-8, 8), t: big ? 0.2 : 0.14, max: big ? 0.2 : 0.14, r: big ? 26 : 16, a: rand(0, 1) });
+    G.dmgNums.push({ x: e.x + rand(-10, 10), y: e.y - EDEF[e.type].h - 6, v: Math.round(dmg), big, t: 0.8, vy: -70 });
+  }
   const a = Math.atan2(e.y - src.y, e.x - src.x);
   e.kx += Math.cos(a) * kb / e.mass; e.ky += Math.sin(a) * kb / e.mass;
   const st = e.type === 'titan' ? stun * 0.1 : e.type === 'brute' ? stun * 0.35 : stun;
@@ -270,7 +276,7 @@ function enemyStrike(e) {
     Sfx.play('slam'); addShake(e.type === 'titan' ? 14 : 9);
     burst(cx, cy, 2, e.type === 'titan' ? 30 : 18, '#4a4232', 240, 5, 0.6);
     stain(cx, cy, 'rgba(20,16,10,0.35)', d.slam * 0.5);
-    for (const p of G.players) if (alive(p) && dist(cx, cy, p.x, p.y) < d.slam + p.r) hurtPlayer(p, d.dmg * e.dmgMul, { x: cx, y: cy });
+    for (const p of G.players) if (alive(p) && dist(cx, cy, p.x, p.y) < d.slam + p.r && !wallBetween(e.x, e.y, p.x, p.y, p.r)) hurtPlayer(p, d.dmg * e.dmgMul, { x: cx, y: cy });
     for (const s of World.structs) { if (!s.solid || s.carried) continue; if (distToRect(cx, cy, s.x, s.y, s.w, s.h) < d.slam) damageStruct(s, d.sdmg * e.dmgMul); }
     for (const pr of World.props) if (pr.explosive && !pr.dead && distToRect(cx, cy, pr.x, pr.y, pr.w, pr.h) < d.slam) damageProp(pr, 50);
     return;
@@ -282,7 +288,7 @@ function enemyStrike(e) {
   }
   const p = e.tgt; e.tgt = null;
   if (!p || !alive(p)) return;
-  if (dist(e.x, e.y, p.x, p.y) < d.range + p.r + 14 && Math.abs(angDiff(e.face, Math.atan2(p.y - e.y, p.x - e.x))) < 1.4) {
+  if (dist(e.x, e.y, p.x, p.y) < d.range + p.r + 14 && Math.abs(angDiff(e.face, Math.atan2(p.y - e.y, p.x - e.x))) < 1.4 && !wallBetween(e.x, e.y, p.x, p.y, p.r)) {
     hurtPlayer(p, d.dmg * e.dmgMul, e);
     if (e.type === 'ghoul') { p.slowT = 1.2; floatText(p.x, p.y - 94, 'Гуль вцепился!', '#ffb0a0', 13); }
   }
@@ -338,8 +344,8 @@ function explode(x, y, R, dmg) {
   burst(x, y, 10, 30, '#ffb040', 320, 5, 0.7); burst(x, y, 10, 20, '#3a3028', 260, 6, 1.1);
   stain(x, y, 'rgba(10,8,6,0.6)', R * 0.5);
   G.fires.push({ x, y, r: 60, t: 3 });
-  for (const e of G.enemies) { const d = dist(x, y, e.x, e.y); if (d < R + e.r) damageEnemy(e, dmg * (1 - d / (R + e.r) * 0.5), { x, y }, 600, 1.2); }
-  for (const p of G.players) { const d = dist(x, y, p.x, p.y); if (alive(p) && d < R) { p.inv = 0; hurtPlayer(p, dmg * 0.45 * (1 - d / R * 0.5), { x, y }); } }
+  for (const e of G.enemies) { const d = dist(x, y, e.x, e.y); if (d < R + e.r && !wallBetween(x, y, e.x, e.y, e.r)) damageEnemy(e, dmg * (1 - d / (R + e.r) * 0.5), { x, y }, 600, 1.2); }
+  for (const p of G.players) { const d = dist(x, y, p.x, p.y); if (alive(p) && d < R && !wallBetween(x, y, p.x, p.y, p.r)) { p.inv = 0; hurtPlayer(p, dmg * 0.45 * (1 - d / R * 0.5), { x, y }); } }
   for (const s of World.structs) if (!s.carried && distToRect(x, y, s.x, s.y, s.w, s.h) < R) damageStruct(s, dmg);
   for (const pr of World.props) if (pr.explosive && !pr.dead && !pr.fuse && distToRect(x, y, pr.x, pr.y, pr.w, pr.h) < R) { pr.fuse = 0.25; }
 }

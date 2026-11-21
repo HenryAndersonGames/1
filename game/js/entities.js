@@ -159,7 +159,7 @@ function updatePlayer(p, c, dt) {
     case 'atk': updateAttack(p, c, dt, spd); break;
     case 'dash': {
       p.t -= dt;
-      p.x += p.rollDx * 1100 * dt; p.y += p.rollDy * 1100 * dt;
+      for (let k = 0; k < 4; k++) { p.x += p.rollDx * 275 * dt; p.y += p.rollDy * 275 * dt; collideWorld(p, p.r, null); }
       for (const e of G.enemies) if (!e.dead && e.state !== 'dying' && e.state !== 'cling' && !p.dashSet.has(e) && dist(p.x, p.y, e.x, e.y) < e.r + 26) { p.dashSet.add(e); damageEnemy(e, 26 + 3 * p.sk.agi, p, 300, 0.5); Sfx.play('hit'); }
       burst(p.x, p.y, 10, 1, '#8a7a60', 40, 3, 0.3);
       if (p.t <= 0) p.state = 'normal';
@@ -225,6 +225,20 @@ function buySkill(p, id) {
   if (p.pts === 0 && p.menuTab === 0) p.menu = false;
 }
 
+// ----- Видимость: удары, способности и действия не проходят сквозь стены и закрытые двери -----
+function wallBetween(ax, ay, bx, by, margin = 0) {
+  const d = dist(ax, ay, bx, by), n = Math.ceil(d / 7);
+  for (let k = 1; k < n; k++) {
+    if (k * 7 > d - margin) break;
+    const t = k / n, x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+    if (pointBlocked(x, y)) return true;
+    let b = false;
+    sgQuery(SG.dcells, x - 1, y - 1, x + 1, y + 1, (s) => { if (s.solid && !s.low && !s.carried && x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h) { b = true; return false; } });
+    if (b) return true;
+  }
+  return false;
+}
+
 // ----- Бой: наборы приёмов и комбо -----
 function moveAllowed(p, id) { const M = MOVESETS[WCLASS[p.weapon.type]][id]; return M && (!M.mar || p.sk.mar >= M.mar); }
 function startAttack(p, kind, forced) {
@@ -244,7 +258,7 @@ function startMove(p, id, M) {
   let weak = false;
   if (M.base === 'H') { if (p.st >= 16) p.st -= 16; else weak = true; }
   p.state = 'atk'; p.t = 0;
-  p.atk = { id, M, B, wind, act: M.act, rec, hitsDone: 0, hits: M.hits || 1, weak, queued: null, hitSet: new Set() };
+  p.atk = { id, M, B, wind, act: Math.max(0.07, M.act), rec, hitsDone: 0, hits: M.hits || 1, weak, queued: null, hitSet: new Set(), anim: animFor(id, M, WCLASS[p.weapon.type]) };
   p.comboN = (p.comboN || 0) + 1;
   Sfx.play(M.base === 'H' ? 'heavy' : 'swing');
 }
@@ -288,7 +302,7 @@ function useAbility(p, slot) {
   if (p.abCd[id] > 0) { floatText(p.x, p.y - 120, `${ABIL[id].name}: ${p.abCd[id].toFixed(1)} с`, '#bbb', 12); Sfx.play('deny'); return; }
   p.abCd[id] = ABIL[id].cd;
   const fx = Math.cos(p.face), fy = Math.sin(p.face);
-  const foes = (r, x = p.x, y = p.y) => G.enemies.filter((e) => !e.dead && e.state !== 'dying' && e.state !== 'cling' && dist(x, y, e.x, e.y) < r + e.r);
+  const foes = (r, x = p.x, y = p.y) => G.enemies.filter((e) => !e.dead && e.state !== 'dying' && e.state !== 'cling' && e.state !== 'held' && dist(x, y, e.x, e.y) < r + e.r && !wallBetween(x, y, e.x, e.y, e.r));
   switch (id) {
     case 'push':
       for (const e of foes(160)) if (Math.abs(angDiff(p.face, Math.atan2(e.y - p.y, e.x - p.x))) < 1.0) { damageEnemy(e, 10, p, 750, 0.9); e.thrown = 0.4; }
@@ -356,7 +370,7 @@ function shoot(p) {
   if (p.gunCd > 0) return;
   if (G.team.ammo <= 0) { floatText(p.x, p.y - 116, 'Нет патронов', '#ff9a8a', 14); Sfx.play('click'); p.gunCd = 0.3; return; }
   G.team.ammo--; p.gunCd = gun.rate;
-  p.state = 'light'; p.t = 0; p.atk = { gun: true, dur: W.L.dur };
+  p.state = 'light'; p.t = 0; p.atk = { gun: true, dur: W.L.dur, anim: 'shoot' };
   const mx = p.x + Math.cos(p.face) * 30, my = p.y - 38 + Math.sin(p.face) * 18;
   for (let k = 0; k < gun.pellets; k++) {
     const a = p.face + (Math.random() - 0.5) * gun.spread * 2;
@@ -418,6 +432,7 @@ function meleeHit(p) {
     const inArc = d <= reach + e.r && (Math.abs(angDiff(p.face, ang)) <= arc || d <= e.r + p.r + 4);
     const inAoe = M.aoe && dist(cx, cy, e.x, e.y) < M.aoe + e.r;
     if (!inArc && !inAoe) continue;
+    if (wallBetween(p.x, p.y, e.x, e.y, e.r)) continue;
     let dd = dmg;
     if (M.back && Math.abs(angDiff(e.face, ang)) < 1.0) { dd *= M.back; crit = 'В спину!'; }
     if (p.sk.mar >= 5 && (e.stun > 0 || e.frozen > 0)) dd *= 2;
@@ -434,11 +449,13 @@ function meleeHit(p) {
     if (!ok) continue;
     if (distToRect(p.x, p.y, s.x, s.y, s.w, s.h) > reach - 6) continue;
     const cx = s.x + s.w / 2, cy = s.y + s.h / 2;
+    if (s.kind === 'loot' && wallBetween(p.x, p.y, cx, cy, 14)) continue;
     if (Math.abs(angDiff(p.face, Math.atan2(cy - p.y, cx - p.x))) > arc + 0.4) continue;
     damageStruct(s, s.kind === 'door' ? dmg * (W.pry ? 3 : 1) : dmg); hit++;
   }
   for (const pr of World.props) {
     if (!pr.explosive || pr.dead || distToRect(p.x, p.y, pr.x, pr.y, pr.w, pr.h) > reach - 6) continue;
+    if (wallBetween(p.x, p.y, pr.x + pr.w / 2, pr.y + pr.h / 2, 16)) continue;
     damageProp(pr, dmg); hit++;
   }
   // рубим деревья
@@ -457,7 +474,8 @@ function meleeHit(p) {
     hit = -1; break;
   }
   if (hit > 0) {
-    G.hitstop = heavy ? 0.07 : 0.035; addShake(heavy ? 6 : 2); Sfx.play(heavy ? 'hitH' : 'hit');
+    G.hitstop = crit ? 0.12 : heavy ? 0.085 : 0.045; addShake(heavy ? 6 : 2.5); Sfx.play(heavy ? 'hitH' : 'hit');
+    G.camKick = { x: Math.cos(p.face) * (heavy ? 7 : 3), y: Math.sin(p.face) * (heavy ? 5 : 2), t: 0.12 };
     wearWeapon(p, heavy ? 2 : 1);
     if (crit) floatText(p.x, p.y - 120, crit, '#ffe08a', 15);
   }
@@ -547,20 +565,21 @@ function interactTarget(p) {
   }
   const fx = p.x + Math.cos(p.face) * 18, fy = p.y + Math.sin(p.face) * 18;
   let best = null, bd = 1e9;
-  const consider = (d, lim, obj) => { if (d < lim && d < bd) { bd = d; best = obj; } };
-  for (const it of G.items) if (!it.held && !it.fly) consider(dist(fx, fy, it.x, it.y), 46, { t: 'item', it });
+  const consider = (d, lim, obj, tx, ty, m = 10) => { if (d < lim && d < bd && (tx === undefined || !wallBetween(p.x, p.y, tx, ty, m))) { bd = d; best = obj; } };
+  for (const it of G.items) if (!it.held && !it.fly) consider(dist(fx, fy, it.x, it.y), 46, { t: 'item', it }, it.x, it.y, 4);
   sgQuery(SG.dcells, fx - 60, fy - 60, fx + 60, fy + 60, (s) => {
     if (s.carried) return;
-    if (s.kind === 'furn') consider(distToRect(fx, fy, s.x, s.y, s.w, s.h), 30, { t: 'furn', s });
+    if (s.kind === 'furn') consider(distToRect(fx, fy, s.x, s.y, s.w, s.h), 30, { t: 'furn', s }, s.x + s.w / 2, s.y + s.h / 2, 20);
     else if (s.kind === 'door' && !s.broken) consider(distToRect(fx, fy, s.x, s.y, s.w, s.h) + 6, 44, { t: 'door', s });
   });
   sgQuery(SG.cells, fx - 70, fy - 70, fx + 70, fy + 70, (e) => {
     const pr = e.ref;
     if (!pr || pr.spr === undefined) return;
     const d = distToRect(fx, fy, pr.x, pr.y, pr.w, pr.h);
-    if (pr.bench) consider(d + 4, 40, { t: 'bench' });
-    else if (pr === World.gen) consider(d, 40, { t: 'gen' });
-    else if (pr.search && !pr.searched) consider(d + 2, 36, { t: 'search', pr });
+    const tx = pr.x + pr.w / 2, ty = pr.y + pr.h / 2, m = Math.max(pr.w, pr.h) / 2 + 4;
+    if (pr.bench) consider(d + 4, 40, { t: 'bench' }, tx, ty, m);
+    else if (pr === World.gen) consider(d, 40, { t: 'gen' }, tx, ty, m);
+    else if (pr.search && !pr.searched) consider(d + 2, 36, { t: 'search', pr }, tx, ty, m);
   });
   return best;
 }
