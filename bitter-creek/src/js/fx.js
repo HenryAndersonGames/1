@@ -12,7 +12,7 @@ export class FX {
     this.dangers = [];
     const pm = (c, add) => new THREE.SpriteMaterial({ map: TEX.soft, color: c, transparent: true, depthWrite: false, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending });
     this.pool = [];
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 160; i++) {
       const s = new THREE.Sprite(pm(0xffffff, false)); s.visible = false; this.scene.add(s);
       this.pool.push({ s, life: 0 });
     }
@@ -42,6 +42,10 @@ export class FX {
   ash(x, y, z) { this._part(x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), 0x141010, 0.5 + Math.random() * 0.6, (Math.random() - 0.5), 1.5 + Math.random(), (Math.random() - 0.5), 1.4, 0.3); }
   dust(x, y, z) { for (let i = 0; i < 3; i++) this._part(x, y, z, 0xb89a70, 0.4, (Math.random() - 0.5) * 2, Math.random() * 1.5, (Math.random() - 0.5) * 2, 0.5, -2); }
   sparks(x, y, z) { for (let i = 0; i < 4; i++) this._part(x, y, z, 0xffc070, 0.15, (Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6, 0.25, -12, true); }
+  smoke(x, y, z, v = 0) {
+    const p = this._part(x + (Math.random() - 0.5) * 0.4, y, z + (Math.random() - 0.5) * 0.4, Math.random() < 0.5 ? 0x2a2624 : 0x4a4440, 1.2 + Math.random() * 0.6, v * 0.6 + (Math.random() - 0.5), 2.5 + Math.random(), (Math.random() - 0.5), 3.5, 0.15);
+  }
+  ember(x, y, z) { this._part(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5, Math.random() < 0.5 ? 0xff9a30 : 0xffd060, 0.12, (Math.random() - 0.5) * 0.6, 1.6 + Math.random() * 1.5, (Math.random() - 0.5) * 0.6, 1.4, 0.4, true); }
   fire(x, y, z) { this._part(x + (Math.random() - 0.5) * 2, y, z + (Math.random() - 0.5) * 2, Math.random() < 0.5 ? 0xff7a20 : 0xffc040, 0.8 + Math.random(), 0, 3 + Math.random() * 2, 0, 0.9, 1, true); }
 
   shot(x0, y0, z0, x1, y1, z1, silver) {
@@ -90,7 +94,7 @@ export class FX {
       p.s.position.x += p.vx * dt; p.s.position.y += p.vy * dt; p.s.position.z += p.vz * dt;
       const k = p.life / p.max;
       p.s.material.opacity = k;
-      const sz = p.size * (1.3 - k * 0.3);
+      const sz = p.size * (p.grav === 0.15 ? 1 + (1 - k) * 3.5 : 1.3 - k * 0.3);
       p.s.scale.set(sz, sz, 1);
     }
     for (const t of this.tracers) if (t.life > 0) { t.life -= dt; if (t.life <= 0) t.l.visible = false; }

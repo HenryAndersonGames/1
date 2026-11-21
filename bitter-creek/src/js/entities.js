@@ -77,7 +77,7 @@ export class Player extends Actor {
     this.maxHp = 100; this.hp = 100; this.alive = true; this.downed = false; this.downT = 0;
     this.clip = 6; this.clipType = 'lead'; this.ammo = 24; this.silver = 0; this.prefer = 'lead';
     this.reloadT = 0; this.cd = 0; this.aimT = 0; this.aimDir = 0; this.reviveT = 0; this.hurtT = 0;
-    this.light = new THREE.PointLight('#ffb867', 0, 22, 1.4);
+    this.light = new THREE.PointLight('#ffa857', 0, 19, 1.7);
     g.scene.add(this.light);
     this.isPlayer = true;
   }

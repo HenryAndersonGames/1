@@ -1,6 +1,6 @@
 {
   "name": "bitter-creek",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Биттер-Крик — нуарный вестерн-детектив на двоих",
   "main": "electron/main.js",
   "author": "Bitter Creek Team",

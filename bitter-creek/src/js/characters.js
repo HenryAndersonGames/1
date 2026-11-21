@@ -24,7 +24,7 @@ export function buildParts(lookIn, demon = false) {
   const legS = demon ? 1.18 : 1, armS = demon ? 1.45 : 1;
   const off = 0.96 * (legS - 1);
   const Y = (y) => y + off;
-  const F = SURF.FINE;
+  const F = SURF.CHAR;
   const b = new GeoBuilder(F), eyes = new GeoBuilder(F);
   const skinD = shade(L.skin, 0.82);
   const female = !!L.skirt;
@@ -57,6 +57,11 @@ export function buildParts(lookIn, demon = false) {
     b.box(shade(C, 0.82), -0.065, Y(1.33), zf(0.2 * W) + 0.02, 0.05, 0.17, 0.012, 0, 0, -0.32);
     b.box(shade(C, 0.82), 0.065, Y(1.33), zf(0.2 * W) + 0.02, 0.05, 0.17, 0.012, 0, 0, 0.32);
     b.ecyl(C, 0, Y(1.47), -0.01, 0.075, 0.1, 0.07, 1.0, 12); // воротник
+    for (const s of [-1, 1]) {
+      b.box(shade(C, 0.78), s * 0.12 * W, Y(1.07), zf(0.17 * W) + 0.022, 0.09, 0.012, 0.02, 0, s * 0.35, 0);
+      b.sph('#2a2420', s * 0.07, Y(1.18), zf(0.19 * W) + 0.02, 0.012, 0.012, 0.008, 6);
+      b.sph('#2a2420', s * 0.07, Y(1.06), zf(0.175 * W) + 0.02, 0.012, 0.012, 0.008, 6);
+    }
     if (L.coatLong) {
       b.box(C, 0, Y(0.68), -0.12 * W, 0.36 * W, 0.66, 0.03, -0.1, 0, 0);
       for (const s of [-1, 1]) {
@@ -74,6 +79,7 @@ export function buildParts(lookIn, demon = false) {
   }
   if (L.apron) b.box(L.apron, 0, Y(female ? 0.66 : 0.78), female ? 0.27 * W : zf(0.17 * W) + 0.02, 0.32, female ? 0.72 : 0.55, 0.012, female ? -0.27 : -0.05, 0, 0);
   if (L.collar) b.box('#f0f0f0', 0, Y(1.48), 0.055, 0.045, 0.04, 0.02);
+  else if (!female && !L.bandana) for (const s of [-1, 1]) b.box(L.shirt, s * 0.035, Y(1.47), 0.05, 0.05, 0.035, 0.012, 0.3, 0, s * 0.5);
   if (L.badge) {
     const bz = zf(0.2 * W) + (L.coat ? 0.03 : 0.015);
     b.box('#e0bc48', -0.1, Y(1.3), bz, 0.055, 0.055, 0.008);
@@ -105,7 +111,14 @@ export function buildParts(lookIn, demon = false) {
       b.sph(L.skin, s * 0.098, hy + 0.012, -0.005, 0.016, 0.032, 0.024, 8);
       b.sph(shade(L.skin, 0.94), s * 0.055, hy - 0.02, 0.08, 0.025, 0.02, 0.015, 8);
     }
-    b.box('#6e3c32', 0, hy - 0.056, 0.1, 0.038, 0.007, 0.008);
+    for (const s of [-1, 1]) {
+      b.sph(shade(L.skin, 0.72), s * 0.038, hy + 0.03, 0.082, 0.026, 0.02, 0.012, 8);
+      b.sph(shade(L.skin, 1.04), s * 0.06, hy - 0.005, 0.08, 0.028, 0.018, 0.02, 8);
+      if (!female && L.hairStyle !== 'bald') b.box(L.hair, s * 0.096, hy - 0.005, 0.02, 0.012, 0.06, 0.03);
+    }
+    b.sph('#8a4a3e', 0, hy - 0.055, 0.098, 0.028, 0.008, 0.01, 8);
+    b.sph('#7a3e34', 0, hy - 0.064, 0.096, 0.024, 0.007, 0.01, 8);
+    b.sph(shade(L.skin, 0.88), 0, hy - 0.088, 0.085, 0.03, 0.016, 0.02, 8);
     if (L.scar) b.box('#8a4a40', 0.055, hy, 0.088, 0.008, 0.07, 0.008, 0, 0, 0.4);
   } else {
     b.sph(L.skin, 0, hy + 0.05, 0, 0.09, 0.16, 0.1, 16);
@@ -200,9 +213,13 @@ export function buildParts(lookIn, demon = false) {
     a.sph(sleeve, 0, 0, 0, 0.049 * W, 0.049 * W, 0.049 * W, 10);
     a.cyl(sleeve, 0, -0.125, 0, 0.047 * W, 0.04 * W, 0.25, 12);
     a.cyl(L.coat ? shade(L.coat, 0.85) : shirt, 0, -0.245, 0, 0.042 * W, 0.044 * W, 0.03, 12);
-    a.box(L.skin, 0, -0.31, 0.005, 0.055, 0.085, 0.03);
-    a.box(L.skin, right ? -0.03 : 0.03, -0.29, 0.02, 0.018, 0.05, 0.02, 0, 0, right ? 0.4 : -0.4);
-    a.box(skinD, 0, -0.355, 0.012, 0.05, 0.02, 0.026, 0.4);
+    a.box(L.skin, 0, -0.3, 0.004, 0.056, 0.07, 0.03);
+    for (let f = 0; f < 4; f++) {
+      const fx = (f - 1.5) * 0.0135;
+      a.box(L.skin, fx, -0.348, 0.008, 0.012, 0.035, 0.016, 0.25);
+      a.box(skinD, fx, -0.374, 0.018, 0.011, 0.025, 0.014, 0.9);
+    }
+    a.box(L.skin, right ? -0.032 : 0.032, -0.3, 0.02, 0.016, 0.045, 0.018, 0.3, 0, right ? 0.5 : -0.5);
     if (demon) for (let i = -1; i <= 1; i++) a.cone('#121010', i * 0.018, -0.4, 0.015, 0.009, 0.1, 4, PI);
     const g = a.build(); g.scale(1, armS, 1); return g;
   };
@@ -225,6 +242,7 @@ export function buildParts(lookIn, demon = false) {
     l.sph(L.boots, 0, -0.442, 0.15, 0.043, 0.036, 0.05, 10);
     l.box(shade(L.boots, 0.6), 0, -0.47, -0.04, 0.07, 0.04, 0.06);
     l.box(shade(L.boots, 0.6), 0, -0.476, 0.06, 0.088, 0.012, 0.2);
+    if (L.holster) { l.box('#9a9080', 0, -0.43, -0.09, 0.012, 0.012, 0.06); l.cyl('#b8b0a0', 0, -0.43, -0.125, 0.022, 0.022, 0.006, 8, 0, 0, Math.PI / 2); }
     const g = l.build(); g.scale(1, legS, 1); return g;
   };
   return {

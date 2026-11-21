@@ -16,6 +16,10 @@ export const LOC = {
   bridge: { x: 0, z: 0, name: 'Мост' },
 };
 
+// железная дорога: проходит севернее города, через холмы — выемкой, в горы — тоннелями
+export function railZ(x) { return -104 + 5 * Math.sin(x * 0.006) - 0.012 * Math.max(0, -x - 150) * 2; }
+export const RAIL_Y = 0.55;
+
 export function creekZ(x) {
   return 112 + 18 * Math.sin(x * 0.012) + 8 * Math.sin(x * 0.031 + 1.3);
 }
@@ -31,6 +35,7 @@ export const ROADS = [
   { w: 3.2, pts: [[-170, -26], [-194, -120], [-205, -218]] },
   { w: 3.2, pts: [[106, 0], [122, -26], [152, -82], [192, -160], [232, -234]] },
   { w: 3, pts: [[106, -2], [128, -30]] },
+  { w: 3.6, pts: [[29.5, -10], [29.5, -40], [36, -82]] },
 ];
 
 export function roadDist(x, z) {
@@ -93,6 +98,9 @@ export function heightAt(x, z) {
     const d = Math.sqrt(dx * dx + dz * dz);
     if (d < p.r + p.f) h = lerp(p.h, h, smoothstep(p.r, p.r + p.f, d));
   }
+  // насыпь и выемка железной дороги
+  const rd = Math.abs(z - railZ(x));
+  if (rd < 18) h = lerp(RAIL_Y - 0.25, h, smoothstep(3.2, 13 + Math.min(5, Math.max(0, h - RAIL_Y) * 0.15), rd));
   // русло ручья
   const cz = Math.abs(z - creekZ(x));
   if (cz < 12) h -= (1 - smoothstep(3.5, 10, cz)) * 3.4;
@@ -111,8 +119,14 @@ export function groundColor(x, z, h, ny, rnd) {
   const cz = Math.abs(z - creekZ(x));
   const pd = Math.hypot(x - LOC.pit.x, z - LOC.pit.z);
   let c;
-  if (h < WATER_Y + 0.6 && cz < 11) c = [0.33, 0.29, 0.22];
-  else if (rd.d < 0) c = rd.town ? [0.62, 0.5, 0.36] : [0.58, 0.46, 0.32];
+  const rz = Math.abs(z - railZ(x));
+  if (rz < 2.6) c = [0.36, 0.33, 0.3];
+  else if (rz < 4.2) c = [0.46, 0.4, 0.33];
+  else if (h < WATER_Y + 0.6 && cz < 11) c = [0.33, 0.29, 0.22];
+  else if (rd.d < 0) {
+    c = rd.town ? [0.62, 0.5, 0.36] : [0.58, 0.46, 0.32];
+    if (rd.town && Math.abs(Math.abs(z) - 2.3) < 0.55 && Math.abs(x) < 104) c = [0.52, 0.41, 0.29];
+  }
   else if (pd < 40) c = pd < 12 ? [0.2, 0.08, 0.06] : [0.38, 0.17, 0.12];
   else if (ny < 0.78) c = h > 30 ? [0.55, 0.47, 0.4] : [0.48, 0.38, 0.29];
   else if (h > 34) c = [0.6, 0.53, 0.45];

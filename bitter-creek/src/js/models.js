@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Поверхности (атрибут aDet): 0 — ткань/камень (мелкий шум), 1 — доски, 2 — земля
-export const SURF = { FINE: 0, WOOD: 1, GROUND: 2 };
+export const SURF = { FINE: 0, WOOD: 1, GROUND: 2, CHAR: 3 };
 
 const cache = new Map();
 function prepare(g, smooth) {
@@ -212,20 +212,29 @@ varying float vDet; varying vec3 vWP; varying vec3 vWN;`)
   if (vDet > 0.5 && vDet < 1.5) {
     float pl = texture2D(detailMap, vWP.zy * 0.24).r * bw.x + texture2D(detailMap, vWP.xz * 0.24).r * bw.y + texture2D(detailMap, vWP.xy * 0.24).r * bw.z;
     d = pl * 0.8 + fine * 0.2;
-  } else if (vDet > 1.5) {
+  } else if (vDet > 1.5 && vDet < 2.5) {
     float g1 = texture2D(detailMap, vWP.xz * 0.045).g;
     float g2 = texture2D(detailMap, vWP.xz * 0.37).g;
-    float g3 = texture2D(detailMap, vWP.xz * 1.9).b;
+    float g3 = texture2D(detailMap, vWP.xz * 0.95).b;
     d = 0.5 + (g1 * 0.45 + g2 * 0.35 + g3 * 0.2 - 0.5) * 1.8;
   }
-  diffuseColor.rgb *= mix(1.0, d * 2.0, detailStr);
-}`);
+  diffuseColor.rgb *= mix(1.0, d * 2.0, detailStr * (vDet > 2.5 ? 0.6 : 1.0));
+}`)
+      .replace('#include <opaque_fragment>', `
+if (vDet > 2.5) {
+  float rim = 1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
+  outgoingLight += rimCol * pow(rim, 3.0) * 0.55;
+}
+#include <opaque_fragment>`)
+      .replace('uniform sampler2D detailMap; uniform float detailStr;', 'uniform sampler2D detailMap; uniform float detailStr; uniform vec3 rimCol;');
+    sh.uniforms.rimCol = MAT.rimCol;
   };
   mat.customProgramCacheKey = () => 'bcdetail';
 }
 
 export function initMaterials(quality = 'medium') {
   TEX.detail = detailTexture();
+  MAT.rimCol = { value: new THREE.Color(0.5, 0.4, 0.3) };
   MAT.solid = new THREE.MeshLambertMaterial({ vertexColors: true });
   if (quality !== 'low') addDetail(MAT.solid, 0.55);
   MAT.glow = new THREE.MeshBasicMaterial({ vertexColors: true });
@@ -244,20 +253,35 @@ export function initMaterials(quality = 'medium') {
 // Небесный купол: градиент от горизонта к зениту и ореол солнца
 export function makeSky() {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { top: { value: new THREE.Color('#6a7f9a') }, horizon: { value: new THREE.Color('#c9a57e') }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: new THREE.Color('#ffe0b0') }, sunAmt: { value: 1 } },
+    uniforms: {
+      top: { value: new THREE.Color('#6a7f9a') }, horizon: { value: new THREE.Color('#c9a57e') }, sunDir: { value: new THREE.Vector3(0, 1, 0) },
+      sunCol: { value: new THREE.Color('#ffe0b0') }, sunAmt: { value: 1 }, cloudCol: { value: new THREE.Color('#e8dcc8') }, cloudAmt: { value: 0.8 }, time: { value: 0 },
+    },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w * 0.9999; }`,
-    fragmentShader: `uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform vec3 sunCol; uniform float sunAmt; varying vec3 vDir;
-      void main(){ float h = clamp(vDir.y, 0.0, 1.0); vec3 c = mix(horizon, top, pow(h, 0.55));
-      float s = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
-      c += sunCol * (pow(s, 600.0) * 1.6 + pow(s, 12.0) * 0.25) * sunAmt;
-      if (vDir.y < 0.0) c = horizon;
-      gl_FragColor = vec4(c, 1.0);
-      #include <tonemapping_fragment>
-      #include <colorspace_fragment>
+    fragmentShader: `uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform vec3 sunCol; uniform float sunAmt; uniform vec3 cloudCol; uniform float cloudAmt; uniform float time; varying vec3 vDir;
+      float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+      float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; } return s; }
+      void main(){
+        vec3 d = normalize(vDir);
+        float h = clamp(d.y, 0.0, 1.0); vec3 c = mix(horizon, top, pow(h, 0.55));
+        float s = max(dot(d, normalize(sunDir)), 0.0);
+        c += sunCol * (pow(s, 600.0) * 1.6 + pow(s, 12.0) * 0.25) * sunAmt;
+        if (d.y > 0.0) {
+          vec2 cp = d.xz / (d.y + 0.12) * 1.4 + vec2(time * 0.012, time * 0.004);
+          float n = fbm(cp);
+          float cl = smoothstep(0.5, 0.78, n) * smoothstep(0.0, 0.2, d.y) * cloudAmt;
+          vec3 cc = mix(cloudCol * 0.75, cloudCol, smoothstep(0.5, 0.9, n)) + sunCol * pow(s, 6.0) * 0.35 * sunAmt;
+          c = mix(c, cc, cl);
+        } else c = horizon;
+        gl_FragColor = vec4(c, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
       }`,
     side: THREE.BackSide, depthWrite: false, fog: false,
   });
-  const m = new THREE.Mesh(new THREE.SphereGeometry(500, 24, 12), mat);
+  const m = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), mat);
   m.frustumCulled = false; m.renderOrder = -10;
   return m;
 }

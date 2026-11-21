@@ -95,6 +95,15 @@ export class Sfx {
     const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16 * v, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
     o.connect(f); f.connect(g); g.connect(this.sfx); o.start(t); l.start(t); o.stop(t + 1.3); l.stop(t + 1.3);
   }
+  chuff(d = 0) {
+    if (!this.ok) return; const v = this.vol(d * 0.8); if (v <= 0) return;
+    this._noise(0.22, 'lowpass', 700, 0.8, 0.35 * v);
+    this._noise(0.12, 'bandpass', 2400, 1.5, 0.08 * v);
+  }
+  trainWhistle(d = 0) {
+    if (!this.ok) return; const v = Math.max(0.15, this.vol(d * 0.3));
+    for (const f of [392, 494, 587]) { this._tone('sawtooth', f, f * 0.985, 1.8, 0.035 * v); this._tone('sine', f, f * 0.99, 1.9, 0.06 * v); }
+  }
   whistle() {
     if (!this.ok) return;
     this._tone('sine', 1500, 2300, 0.18, 0.12); this._tone('sine', 2300, 1700, 0.35, 0.12, this.sfx, 0.2);

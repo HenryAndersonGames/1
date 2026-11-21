@@ -4,6 +4,8 @@ import { initMaterials, MAT, makeSky } from './models.js';
 import { World } from './world.js';
 import { Player, NPC, Demon, Boss, planPath, PIT_TRAIL } from './entities.js';
 import { FX } from './fx.js';
+import { Post } from './post.js';
+import { Ambient } from './details.js';
 import { Horse } from './horse.js';
 import { Input } from './input.js';
 import { Sfx } from './audio.js';
@@ -16,14 +18,14 @@ import { loadSettings, saveSettings, writeSave, readSave, deleteSave } from './s
 
 // ключевые кадры освещения по часам
 const KF = [
-  { h: 0, sky: '#0b0e18', sun: '#7088c0', sunI: 0.55, hs: '#46587e', hg: '#1c1612', hi: 0.55, fn: 6, ff: 80, night: 1 },
-  { h: 5, sky: '#0b0e18', sun: '#7088c0', sunI: 0.55, hs: '#46587e', hg: '#1c1612', hi: 0.55, fn: 6, ff: 80, night: 1 },
+  { h: 0, sky: '#0b0e18', sun: '#7a92c8', sunI: 0.7, hs: '#50648c', hg: '#1c1612', hi: 0.72, fn: 6, ff: 80, night: 1 },
+  { h: 5, sky: '#0b0e18', sun: '#7a92c8', sunI: 0.7, hs: '#50648c', hg: '#1c1612', hi: 0.72, fn: 6, ff: 80, night: 1 },
   { h: 6.3, sky: '#8a7470', sun: '#ffb080', sunI: 1.4, hs: '#b8a49a', hg: '#4a3828', hi: 1.05, fn: 28, ff: 170, night: 0.4 },
   { h: 8, sky: '#c9a57e', sun: '#ffe4bc', sunI: 2.5, hs: '#efe0c8', hg: '#6a5040', hi: 1.55, fn: 55, ff: 235, night: 0 },
   { h: 17, sky: '#c9a57e', sun: '#ffe4bc', sunI: 2.5, hs: '#efe0c8', hg: '#6a5040', hi: 1.55, fn: 55, ff: 235, night: 0 },
   { h: 19, sky: '#b4643c', sun: '#ff8440', sunI: 1.7, hs: '#d89a78', hg: '#4a2a1a', hi: 1.05, fn: 40, ff: 190, night: 0.3 },
   { h: 20.4, sky: '#191420', sun: '#7080b0', sunI: 0.6, hs: '#4a4a6a', hg: '#1a1410', hi: 0.55, fn: 8, ff: 85, night: 1 },
-  { h: 24, sky: '#0b0e18', sun: '#7088c0', sunI: 0.55, hs: '#46587e', hg: '#1c1612', hi: 0.55, fn: 6, ff: 80, night: 1 },
+  { h: 24, sky: '#0b0e18', sun: '#7a92c8', sunI: 0.7, hs: '#50648c', hg: '#1c1612', hi: 0.72, fn: 6, ff: 80, night: 1 },
 ];
 const ECLIPSE = { sky: '#1c0606', sun: '#c03020', sunI: 0.7, hs: '#6a2020', hg: '#140808', hi: 0.6, fn: 6, ff: 75, night: 1 };
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
@@ -35,7 +37,8 @@ export class Game {
     const q = this.settings.quality;
     this.canvas = document.getElementById('c');
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: q === 'high', powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(q === 'low' ? 0.7 : q === 'medium' ? Math.min(1, devicePixelRatio) : Math.min(1.5, devicePixelRatio));
+    this.renderer.setPixelRatio(q === 'low' ? 0.7 : 1);
+    this.post = new Post(this.renderer, q);
     this.renderer.shadowMap.enabled = q !== 'low';
     this.renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -43,7 +46,7 @@ export class Game {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#c9a57e');
     this.scene.fog = new THREE.Fog('#c9a57e', 60, 240);
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.5, 320);
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.3, 320);
     initMaterials(q);
     this.sky = makeSky(); this.scene.add(this.sky);
     this.hemi = new THREE.HemisphereLight('#efe0c8', '#6a5040', 1.5); this.scene.add(this.hemi);
@@ -56,6 +59,8 @@ export class Game {
     }
     this.world = new World(this.scene, q);
     this.fx = new FX(this);
+    this.horses = [];
+    this.ambient = new Ambient(this);
     this.input = new Input(this.canvas);
     this.audio = new Sfx();
     this.ui = new UI(this);
@@ -88,9 +93,12 @@ export class Game {
       for (let i = 0; i < im.data.length; i += 4) { const v = Math.random() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
       cx.putImageData(im, 0, 0); gr.style.backgroundImage = `url(${cv.toDataURL()})`;
     }
-    document.body.classList.toggle('nograin', !s.grade || s.quality === 'low');
+    document.body.classList.toggle('nograin', true);
     this.audio.setVolume(s.volume);
-    this.canvas.classList.toggle('grade', !!s.grade && s.quality !== 'low');
+    const post = s.quality !== 'low';
+    this.canvas.classList.toggle('grade', !!s.grade && !post);
+    document.getElementById('vignette').style.display = post ? 'none' : '';
+    if (this.post && this.post.enabled) this.post.mComp.uniforms.grain.value = s.grade ? 0.045 : 0;
     if (window.native) window.native.fullscreen(!!s.fullscreen);
     else if (!first) {
       try { if (s.fullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen(); else if (!s.fullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (e) { /* */ }
@@ -100,6 +108,8 @@ export class Game {
   resize() {
     const w = innerWidth, h = innerHeight;
     this.renderer.setSize(w, h, false);
+    const pr = this.renderer.getPixelRatio();
+    this.post.setSize(Math.round(w * pr), Math.round(h * pr));
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
   }
   quit() { if (window.native) window.native.quit(); else window.close(); }
@@ -731,10 +741,11 @@ export class Game {
     this.updateLighting(dt);
     this.updateCamera(dt);
     this.audio.update(dt, !!this.state);
-    this.renderer.render(this.scene, this.camera);
+    this.post.render(this.scene, this.camera, this.time);
     this.input.endFrame();
   }
   updateVisualOnly(dt) {
+    if (this.mode === 'menu') { this.ambient.update(dt, this.nightness || 0); this.fx.update(dt); return; }
     this.fx.update(dt * 0.3);
     this.world.update(dt, this.nightness || 0);
   }
@@ -760,8 +771,8 @@ export class Game {
     if (ctrls.some((c) => c.book)) { this.ui.openBook(); return; }
     this.players.forEach((p, i) => {
       const c = ctrls[i];
-      if (c.camL) this.camYaw += dt * 1.6;
-      if (c.camR) this.camYaw -= dt * 1.6;
+      if (c.camL) { this.camYaw += dt * 1.6; this.camManualT = 2; }
+      if (c.camR) { this.camYaw -= dt * 1.6; this.camManualT = 2; }
       p.update(dt, c);
       if (c.call && !p.downed) this.callHorse(p);
       if (!p.horse && !p.downed) this.pushFromHorses(p);
@@ -779,6 +790,7 @@ export class Game {
     });
     if (this.mode !== 'play') return;
     for (const h of this.horses) h.update(dt);
+    this.ambient.update(dt, this.nightness || 0);
     for (const n of this.npcs) n.update(dt);
     for (const d of this.demons) d.update(dt);
     this.demons = this.demons.filter((d) => !d.dead);
@@ -833,6 +845,9 @@ export class Game {
       u.top.value.copy(L.sky).multiplyScalar(L.night > 0.5 ? 0.45 : 0.62).lerp(_c2.set(L.night > 0.5 ? '#05070d' : '#5d7390'), L.night > 0.5 ? 0.6 : 0.45);
       u.sunCol.value.copy(L.sun);
       u.sunAmt.value = (1 - L.night) * (this.eclT > 0 ? 0.2 : 1);
+      u.cloudCol.value.copy(L.hs).lerp(L.sun, 0.35).multiplyScalar(L.night > 0.5 ? 0.25 : 1);
+      u.cloudAmt.value = 0.85 - L.night * 0.35;
+      u.time.value = this.time;
       this.sky.position.copy(this.camera.position);
     }
     this.scene.fog.color.copy(L.sky); this.scene.fog.near = L.fn; this.scene.fog.far = L.ff * qf;
@@ -847,7 +862,9 @@ export class Game {
     this.sun.target.position.copy(ct);
     if (this.sky) this.sky.material.uniforms.sunDir.value.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el));
     this.nightness = L.night;
-    for (const p of this.players) p.light.intensity = L.night * (p.downed ? 6 : 18);
+    if (MAT.rimCol) MAT.rimCol.value.copy(L.sun).multiplyScalar(L.night > 0.5 ? 0.55 : 0.35);
+    this.post.grade(L.night, this.eclT || 0);
+    for (const p of this.players) p.light.intensity = L.night * (p.downed ? 4 : 9);
     this.audio.setNight(L.night, this.demons.some((d) => d.alive && d.state === 'hunt') ? 1 : 0);
   }
   updateCamera(dt) {
@@ -889,32 +906,47 @@ export class Game {
     target.x += (mx - target.x) * k; target.z += (mz - target.z) * k; target.y += (my - target.y) * k;
     this.camTarget.copy(target);
     const riding = this.players.some((p) => p.horse);
-    const base = riding ? 11 : 7.8;
+    const base = riding ? 8.2 : 6.0;
     const want = clamp(base + sep * 0.95, base, 46);
     this.camDistNow = this.camDistNow ? lerp(this.camDistNow, want, 1 - Math.exp(-dt * 2.5)) : want;
     const D = this.camDistNow;
-    let pitch = lerp(0.36, 0.95, clamp((D - 7.8) / 38, 0, 1));
-    const yaw = this.camYaw;
-    // если между камерой и героями дом — камера поднимается и смотрит сверху
-    const H = Math.cos(pitch) * D, sx = Math.sin(yaw), sz = Math.cos(yaw);
-    let free = H;
-    const tp = Math.tan(pitch);
-    for (let s = 1.2; s < H + 1; s += 0.6) {
-      if (1.5 + s * tp > 9.5) break; // луч уже выше крыш
-      if (this.world.blockedAt(target.x + sx * s, target.z + sz * s, true)) { free = Math.max(0.5, s - 1.2); break; }
+    // низкий ракурс вблизи, выше — когда напарники разошлись
+    const pitch = lerp(0.2, 0.85, clamp((D - base) / 36, 0, 1)) + (riding ? 0.06 : 0);
+    const yaw = this.camYaw, sx = Math.sin(yaw), sz = Math.cos(yaw);
+    const ty = target.y + 1.55, tp = Math.tan(pitch), H = Math.cos(pitch) * D;
+    // препятствия по линии взгляда: дома и склоны — камера подъезжает ближе
+    const freeAt = (yw) => {
+      const ax = Math.sin(yw), az = Math.cos(yw);
+      for (let s = 0.8; s < H; s += 0.5) {
+        const x = target.x + ax * s, z = target.z + az * s, y = ty + s * tp;
+        if ((y < 9 && this.world.blockedAt(x, z, true)) || this.world.groundAt(x, z) + 0.6 > y) return Math.max(1.6, s - 0.6);
+      }
+      return H;
+    };
+    let free = freeAt(yaw);
+    // умная камера: если за спиной стена — плавно отворачиваемся к свободному обзору
+    this.camManualT = Math.max(0, (this.camManualT || 0) - dt);
+    if (free < Math.min(H, 4.5) && this.camManualT <= 0 && this.mode === 'play') {
+      let best = yaw, bf = free;
+      for (const d of [0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2.0, -2.0]) { const f = freeAt(yaw + d); if (f > bf + 0.8) { bf = f; best = yaw + d; } if (bf >= H) break; }
+      if (best !== yaw) this.camYaw += (best - yaw) * Math.min(1, dt * 2.2);
     }
-    const want2 = free < H ? Math.max(pitch, Math.acos(clamp(free / D, 0, 1))) : pitch;
-    this.pitchNow = this.pitchNow === undefined ? want2 : lerp(this.pitchNow, want2, 1 - Math.exp(-dt * (want2 > this.pitchNow ? 8 : 2)));
-    pitch = Math.min(1.35, this.pitchNow);
-    let px = target.x + sx * Math.cos(pitch) * D, pz = target.z + sz * Math.cos(pitch) * D;
-    let py = target.y + 1.5 + Math.sin(pitch) * D;
-    const gy = this.world.groundAt(px, pz) + 1.5;
+    const wantH = Math.min(H, free);
+    this.camHNow = this.camHNow === undefined ? wantH : lerp(this.camHNow, wantH, 1 - Math.exp(-dt * (wantH < this.camHNow ? 14 : 2.2)));
+    const Hc = this.camHNow;
+    let px = target.x + sx * Hc, pz = target.z + sz * Hc;
+    let py = ty + Hc * tp + (Hc < 3 ? (3 - Hc) * 0.5 : 0);
+    // навесы: герой под крышей — камера под её краем; камера у края — над или под ним
+    const ru = this.world.roofAt(target.x, target.z);
+    if (ru !== null) py = Math.min(py, ru - 0.45);
+    else { const rc = this.world.roofAt(px, pz); if (rc !== null && py > rc - 0.5 && py < rc + 0.7) py = rc + 0.7; }
+    const gy = this.world.groundAt(px, pz) + 0.7;
     if (py < gy) py = gy;
     if (this.shake > 0 && this.settings.shake) {
       this.shake -= dt;
       px += (Math.random() - 0.5) * this.shake; py += (Math.random() - 0.5) * this.shake; pz += (Math.random() - 0.5) * this.shake;
     } else this.shake = Math.max(0, this.shake - dt);
     cam.position.set(px, py, pz);
-    cam.lookAt(target.x, target.y + 1.4, target.z);
+    cam.lookAt(target.x, target.y + 1.45, target.z);
   }
 }

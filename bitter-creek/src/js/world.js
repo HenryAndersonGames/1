@@ -4,6 +4,8 @@ import { GeoBuilder, MAT, SURF, makeSign, shade } from './models.js';
 import * as BLD from './buildings.js';
 import { heightAt, groundColor, forestMask, roadDist, creekZ, LOC, MAP_HALF, PLAY_HALF, WATER_Y } from './terrain.js';
 import { mulberry32, clamp, smoothstep } from './util.js';
+import { buildDetails } from './details.js';
+import { railZ } from './terrain.js';
 
 const BUILDINGS = [
   // северная сторона главной улицы
@@ -60,6 +62,7 @@ export class World {
     this.buildWater();
     this.buildTown();
     this.buildOutskirts();
+    buildDetails(this);
     this.buildVegetation();
     this.finishChunks();
   }
@@ -127,6 +130,10 @@ export class World {
       if (this.blockedAt(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t)) return true;
     }
     return false;
+  }
+  roofAt(x, z) {
+    for (const r of this.roofs || []) if (x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ) return r.y;
+    return null;
   }
   groundAt(x, z) {
     // мост
@@ -312,6 +319,12 @@ export class World {
       this.addBox(Math.min(t[0].x, t[1].x), Math.min(t[0].z, t[1].z), Math.max(t[0].x, t[1].x), Math.max(t[0].z, t[1].z));
     }
     const porchD = (B.type === 'ff') ? 3.4 : (B.porch ? 3.0 : 1.6);
+    // навесы крылец — для камеры
+    if (B.type === 'ff' || B.porch) {
+      const dep = B.type === 'ff' ? 2.9 : 2.3, ph = B.type === 'ff' ? (B.twoStory ? 3.3 : 3.0) : 2.6;
+      const q = [this.toWorld(B.id, -B.w / 2 - 0.1, 0), this.toWorld(B.id, B.w / 2 + 0.1, dep)];
+      (this.roofs || (this.roofs = [])).push({ minX: Math.min(q[0].x, q[1].x), maxX: Math.max(q[0].x, q[1].x), minZ: Math.min(q[0].z, q[1].z), maxZ: Math.max(q[0].z, q[1].z), y: oy + ph });
+    }
     this.doors[B.id] = this.toWorld(B.id, 0, porchD);
     // вывеска
     if (B.sign && info && info.signY > 0) {
@@ -552,11 +565,11 @@ export class World {
     const r = mulberry32(777);
     const types = {
       pine: this.vegGeo('pine'), dead: this.vegGeo('dead'), cactus: this.vegGeo('cactus'),
-      rock: this.vegGeo('rock'), bush: this.vegGeo('bush'), cotton: this.vegGeo('cotton'), grass: this.vegGeo('grass'),
+      rock: this.vegGeo('rock'), bush: this.vegGeo('bush'), cotton: this.vegGeo('cotton'), grass: this.vegGeo('grass'), reed: this.vegGeo('reed'),
     };
     const inst = {};
     const add = (type, x, z, s, ry) => {
-      const R = type === 'grass' ? 90 : 200, key = type + ':' + Math.floor(x / R) + ',' + Math.floor(z / R);
+      const R = type === 'grass' || type === 'reed' ? 90 : 200, key = type + ':' + Math.floor(x / R) + ',' + Math.floor(z / R);
       (inst[key] || (inst[key] = { type, list: [] })).list.push([x, z, s, ry]);
     };
     const clearOf = (x, z, pad) => {
@@ -566,6 +579,8 @@ export class World {
       if (Math.hypot(x + 232, z + 70) < 18) return false;
       if (Math.hypot(x - LOC.pit.x, z - LOC.pit.z) < 14) return false;
       if (Math.abs(z - creekZ(x)) < 8) return false;
+      if (Math.abs(z - railZ(x)) < 9) return false;
+      for (const c of this.clearZones || []) if (Math.hypot(x - c.x, z - c.z) < c.r) return false;
       return true;
     };
     const N = this.quality === 'low' ? 0.6 : 1;
@@ -600,6 +615,13 @@ export class World {
     scatter('rock', Math.round(380 * N), (x, z, h) => forestMask(x, z) < 0.5 && (h > 6 || r() < 0.35));
     scatter('bush', Math.round(420 * N), (x, z, h) => forestMask(x, z) < 0.4 && h < 25);
     scatter('dead', Math.round(50 * N), (x, z, h) => forestMask(x, z) < 0.3 && h < 20);
+    // камыш и осока у ручья
+    for (let i = 0; i < 1400 * N; i++) {
+      const x = (r() - 0.5) * 2 * PLAY_HALF, side = r() < 0.5 ? -1 : 1;
+      const z = creekZ(x) + side * (3.2 + r() * 5.5);
+      if (Math.abs(x) < 6 || heightAt(x, z) > 2) continue;
+      add('reed', x, z, 0.7 + r() * 0.7, r() * 6);
+    }
     // сухая трава — в том числе на окраинах города
     if (this.quality !== 'low') {
       const G = this.quality === 'high' ? 3200 : 1800;
@@ -694,6 +716,13 @@ export class World {
         b.sph('#6a6a42', 0.45, 0.3, 0.2, 0.45, 0.33, 0.45, 8);
         b.sph('#827c4e', -0.3, 0.32, -0.35, 0.42, 0.3, 0.4, 8);
         for (let i = 0; i < 5; i++) b.limb('#5a4a36', 0, 0, 0, Math.sin(i * 1.3) * 0.6, 0.5, Math.cos(i * 1.3) * 0.6, 0.03, 0.01, 4);
+        break;
+      case 'reed':
+        for (let i = 0; i < 11; i++) {
+          const a = i * 0.57, rr = 0.05 + (i % 4) * 0.08;
+          b.cone(i % 3 ? '#5a6a34' : '#6e7a3e', Math.cos(a) * rr, 0.55 + (i % 3) * 0.1, Math.sin(a) * rr, 0.03, 1.1 + (i % 3) * 0.25, 3, Math.sin(a) * 0.15, 0, Math.cos(a) * 0.15);
+          if (i % 4 === 0) b.cyl('#4a3220', Math.cos(a) * rr * 1.2, 1.3 + (i % 3) * 0.15, Math.sin(a) * rr * 1.2, 0.04, 0.04, 0.22, 6);
+        }
         break;
       case 'grass':
         for (let i = 0; i < 9; i++) {
