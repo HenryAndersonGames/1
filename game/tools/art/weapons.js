@@ -106,7 +106,25 @@ function ammo() {
   return svg(-12, -18, 24, 21, s);
 }
 
+function food() {
+  let s = shape(smooth([[-8, -12, 1], [8, -12, 1], [8.6, 0], [8, 2, 1], [-8, 2, 1], [-8.6, 0]]), '#a8adb0', { sw: 1.1, sh: [1.6, 1.2], nohatch: true,
+    inner: `<rect x="-9" y="-9" width="18" height="7" fill="#c0532e"/>` + line('M-5 -5.5L5 -5.5', 1, '#f0e0b0') + line('M-8 -10L8 -10M-8 0L8 0', 0.6, INK, 0.6) });
+  s += shape(ell(0, -12, 8, 2.4), '#c8ccce', { sw: 0.9, nodrop: true, flat: true });
+  return svg(-11, -17, 22, 21, s);
+}
+function bomb() {
+  let s = shape(smooth([[-4.6, 0, 1], [-4.6, -16, 1], [4.6, -16, 1], [4.6, 0, 1]]), '#6a6e70', { sw: 1.1, sh: [1.4, 1.2], nohatch: true,
+    inner: line('M-4.6 -12L4.6 -12M-4.6 -4L4.6 -4', 1.2, '#3a3c3e') + `<rect x="-4.6" y="-10" width="9.2" height="4" fill="#c0532e"/>` });
+  s += shape(rect(-5.6, -18, 11.2, 3), '#4a4e52', { sw: 0.9, nodrop: true, flat: true }) + line('M0 -18Q2 -23 5 -24', 1.2, '#d8c8a0') + dot(5.4, -24.4, 1.4, '#ffb040');
+  return svg(-8, -28, 16, 31, s);
+}
+function armor() {
+  let s = shape(smooth([[-10, -14], [-4, -16], [0, -13], [4, -16], [10, -14], [11, -2], [8, 4, 1], [-8, 4, 1], [-11, -2]]), '#6a6e64', { sw: 1.2, sh: [2, 1.6],
+    inner: line('M-7 -8L7 -8M-7 -2L7 -2', 1, '#3a3c38') + dot(-5, -11, 0.9, '#b0b4ac') + dot(5, -11, 0.9, '#b0b4ac') + `<rect x="-9" y="0" width="18" height="3" fill="#6b4429"/>` });
+  return svg(-13, -19, 26, 25, s);
+}
 function build(out) {
+  out.food = food(); out.bomb = bomb(); out.armor = armor();
   out.w_bat = bat(false); out.w_spiked = bat(true); out.w_knife = knife(); out.w_axe = axe(); out.w_pipe = pipe();
   out.w_board = board(); out.w_sledge = sledge(); out.w_crowbar = crowbar(); out.w_chair = chair();
   out.w_pistol = pistol(); out.w_shotgun = shotgun();

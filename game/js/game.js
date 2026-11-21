@@ -7,7 +7,7 @@ const DAY_LEN = 140, DUSK_LEN = 20, NIGHT_LEN = 85;
 const G = {
   state: 'title', t: 0, day: 1, phase: 'day', phaseT: 0,
   team: {}, players: [], enemies: [], items: [], pickups: [], projs: [], parts: [], texts: [], stains: [], msgs: [],
-  tracers: [], flashes: [], eprojs: [], webs: [], fires: [], waves: [], bolts: [], allies: [],
+  tracers: [], flashes: [], eprojs: [], webs: [], fires: [], waves: [], bolts: [], allies: [], bombs: [], slowT: 0, ambT: 3,
   spawnQ: [], kills: 0, cam: { x: 2368, y: 1900, zoom: 1 }, shake: 0, hitstop: 0, flowT: 0, flowDirty: true, overT: 0,
   paused: false, showFps: true, quality: 1, bestNight: 0, zoneShown: {},
 };
@@ -21,10 +21,10 @@ function newGame() {
   buildWorld();
   const f = World.fire;
   Object.assign(G, { t: 0, day: 1, phase: 'day', phaseT: 0, kills: 0, overT: 0, zoneShown: {} });
-  G.team = { wood: 4, scrap: 2, cloth: 1, fuel: 1, ammo: 0, band: 1 };
+  G.team = { wood: 4, scrap: 2, cloth: 1, fuel: 1, ammo: 0, band: 1, food: 2 };
   G.players = [makePlayer(0, f.x - 50, f.y - 50), makePlayer(1, f.x + 50, f.y - 50)];
   G.players[1].weapon = { type: 'pipe', dur: WEAPONS.pipe.durab };
-  for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies']) G[k] = [];
+  for (const k of ['enemies', 'items', 'pickups', 'projs', 'parts', 'texts', 'stains', 'msgs', 'spawnQ', 'tracers', 'flashes', 'eprojs', 'webs', 'fires', 'waves', 'bolts', 'allies', 'bombs']) G[k] = [];
   G.cam.x = f.x; G.cam.y = f.y - 80; G.cam.zoom = 1;
   G.flowDirty = true;
   // подручные предметы и находки
@@ -210,7 +210,10 @@ function leash() {
 
 // ---------- Главное обновление ----------
 function update(dt) {
+  if (G.slowT > 0) { G.slowT -= dt; dt *= 0.35; }
   G.t += dt;
+  G.ambT -= dt;
+  if (G.ambT <= 0) { G.ambT = rand(2.5, 6); Sfx.play(G.phase === 'day' ? 'bird' : G.phase === 'night' ? (Math.random() < 0.5 ? 'cricket' : 'wind') : 'cricket'); }
   G.shake = Math.max(0, G.shake - dt * 30);
   for (const m of G.msgs) m.t -= dt;
   G.msgs = G.msgs.filter((m) => m.t > 0);
@@ -234,6 +237,7 @@ function update(dt) {
   for (const p of G.players) updatePlayer(p, Input.ctrls[p.i], dt);
   // монстры далеко от игроков «спят» — экономия для слабых ПК
   for (const e of G.enemies) {
+    if (e.state === 'held' || e.state === 'thrownE') { updateEnemy(e, dt); continue; }
     if (!e.aggro && e.state === 'move' && !G.players.some((p) => Math.abs(p.x - e.x) < 1100 && Math.abs(p.y - e.y) < 800)) continue;
     updateEnemy(e, dt);
   }
@@ -267,10 +271,10 @@ function separate() {
   const E = G.enemies, P = G.players;
   for (let i = 0; i < E.length; i++) {
     const a = E[i];
-    if (a.state === 'dying' || a.state === 'cling') continue;
+    if (a.state === 'dying' || a.state === 'cling' || a.state === 'held' || a.state === 'thrownE') continue;
     for (let j = i + 1; j < E.length; j++) {
       const b = E[j];
-      if (b.state === 'dying' || b.state === 'cling') continue;
+      if (b.state === 'dying' || b.state === 'cling' || b.state === 'held' || b.state === 'thrownE') continue;
       const dx = b.x - a.x, dy = b.y - a.y, R = a.r + b.r;
       if (dx > R || dx < -R || dy > R || dy < -R) continue;
       const d2 = dx * dx + dy * dy;

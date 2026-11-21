@@ -80,6 +80,9 @@ const Sfx = (() => {
       case 'craft': [330, 440, 550].forEach((f, i) => tone(f, 0.08, 'square', 0.08, 0, i * 0.06)); break;
       case 'zap': hiss(0.25, 0.35, 3200, 0.8); tone(880, 0.2, 'sawtooth', 0.1, -500); break;
       case 'frost': hiss(0.5, 0.25, 5000, 1.5); tone(1400, 0.4, 'sine', 0.06, -600); break;
+      case 'bird': [1800, 2300, 1900].forEach((f, i) => tone(f, 0.07, 'sine', 0.025, 300, i * 0.09)); break;
+      case 'cricket': for (let i = 0; i < 4; i++) tone(4200, 0.03, 'square', 0.012, 0, i * 0.06); break;
+      case 'wind': hiss(1.8, 0.035, 350, 0.3); break;
       case 'search': hiss(0.3, 0.08, 1500, 1); break;
     }
   }

@@ -62,6 +62,7 @@ function render() {
     ctx.beginPath(); ctx.ellipse(p.x, p.y, 19, 8, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
   }
   for (const f of G.fires) drawFireArea(ctx, f);
+  for (const b of G.bombs) { put(ctx, Art.s.bomb, b.x, b.y); if (Math.floor(G.t * 12) % 2) { ctx.fillStyle = '#ff4020'; ctx.beginPath(); ctx.arc(b.x, b.y - 34, 3, 0, TAU); ctx.fill(); } }
 
   // 3. сортировка по глубине
   const dl = [];
@@ -71,7 +72,7 @@ function render() {
   for (const p of World.props) if (!p.dead && inView(p.x + p.w / 2, p.y + p.h)) dl.push({ k: p.y + p.h, t: 3, o: p });
   for (const s of World.structs) if (s.kind !== 'trap' && !s.carried && inView(s.x + s.w / 2, s.y)) dl.push({ k: s.y + s.h, t: 4, o: s });
   for (const p of G.players) dl.push({ k: p.y, t: 5, o: p });
-  for (const e of G.enemies) if (inView(e.x, e.y) && !e.hidden) dl.push({ k: e.state === 'cling' && e.host ? e.host.y + 2 : e.y, t: 6, o: e });
+  for (const e of G.enemies) if (inView(e.x, e.y) && !e.hidden && e.state !== 'held' && e.state !== 'thrownE') dl.push({ k: e.state === 'cling' && e.host ? e.host.y + 2 : e.y, t: 6, o: e });
   for (const it of G.items) if (!it.held && !it.fly && inView(it.x, it.y)) dl.push({ k: it.y - 4, t: 7, o: it });
   for (const k of G.pickups) if (inView(k.x, k.y)) dl.push({ k: k.y, t: 8, o: k });
   for (const pr of G.projs) dl.push({ k: pr.y, t: 9, o: pr });
@@ -107,6 +108,7 @@ function render() {
   drawOverlay(ctx, dk);
   // 6. интерфейс
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (G.slowT > 0) { ctx.fillStyle = `rgba(150,200,255,${Math.min(0.18, G.slowT * 0.4)})`; ctx.fillRect(0, 0, Render.W, Render.H); }
   if (G.state === 'play') drawHUD(ctx);
 }
 
@@ -233,7 +235,7 @@ function drawPickup(ctx, k) {
 }
 function drawProj(ctx, pr) {
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(pr.x, pr.y, 9, 3, 0, 0, TAU); ctx.fill();
-  const s = pr.kind === 'furn' ? Art.s[pr.ref.sub] : Art.s[pr.kind];
+  const s = pr.kind === 'furn' ? Art.s[pr.ref.sub] : pr.kind === 'enemy' ? Art.enemy[pr.ref.type].walk[0] : Art.s[pr.kind];
   ctx.save(); ctx.translate(pr.x, pr.y - pr.z - (pr.kind === 'furn' ? 20 : 6)); ctx.rotate(G.t * (pr.kind === 'furn' ? 7 : 14));
   const sc = pr.kind === 'furn' ? 0.8 : 1;
   ctx.drawImage(s.c, -s.w / 2 * sc, -s.h / 2 * sc, s.w * sc, s.h * sc); ctx.restore();
@@ -241,6 +243,7 @@ function drawProj(ctx, pr) {
 
 // ----- Игрок: позы и оружие -----
 function playerPose(p) {
+  if (p.state === 'knock') return p.t > 0.3 ? 'down' : 'kneel';
   if (p.state === 'roll') return 'roll';
   if (p.state === 'dash') return 'atkL1';
   if (p.reviveTgt || p.search) return 'kneel';
@@ -329,6 +332,7 @@ function drawPlayer(ctx, p) {
   ctx.globalAlpha = 1;
   if (p.held) {
     if (p.held.kind === 'item') drawItem(ctx, p.held.ref.kind, p.x, p.y - 114, 0);
+    else if (p.held.kind === 'enemy') { const e = p.held.ref, sp = Art.enemy[e.type].walk[0]; ctx.save(); ctx.translate(p.x, p.y - 104); ctx.rotate(Math.PI); ctx.scale(0.8, 0.8); ctx.drawImage(sp.c, -sp.ax, -sp.ay / 2, sp.w, sp.h); ctx.restore(); }
     else { const f = p.held.ref, fs = Art.s[f.sub], sc = 0.72; ctx.drawImage(fs.c, p.x - (fs.ax + f.w / 2) * sc, p.y - 108 - (fs.ay + f.h) * sc, fs.w * sc, fs.h * sc); }
   }
 }
@@ -555,7 +559,7 @@ function drawHUD(ctx) {
   inkText(ctx, `⚡${gn.fuel}${gn.on ? ' ВКЛ' : ''}`, cx + cw - 14, 30, gn.on ? '#b8ff9a' : '#a89c80', 12, true, 'right');
 
   // ресурсы
-  const items = [['wood', G.team.wood], ['scrap', G.team.scrap], ['cloth', G.team.cloth], ['fuel', G.team.fuel], ['ammo', G.team.ammo], ['band', G.team.band]];
+  const items = [['wood', G.team.wood], ['scrap', G.team.scrap], ['cloth', G.team.cloth], ['fuel', G.team.fuel], ['ammo', G.team.ammo], ['food', G.team.food], ['band', G.team.band]];
   const rw = items.length * 74 + 16, rx = W / 2 - rw / 2, ry = 720 - 50;
   panel(ctx, rx, ry, rw, 40);
   items.forEach(([n, v], i) => { icon(ctx, n, rx + 26 + i * 74, ry + 20, 24); inkText(ctx, String(v), rx + 44 + i * 74, ry + 27, n === 'band' ? '#9fe39a' : RES[n].col, 16); });
@@ -616,7 +620,9 @@ function drawPlayerPanel(ctx, p, x, y) {
   bar(ctx, bx, y + 32, bw, 14, p.hp / p.maxHp, p.state === 'downed' ? '#7a2a22' : '#c43e30');
   inkText(ctx, p.state === 'downed' ? `БЕЗ СОЗНАНИЯ ${Math.ceil(p.bleed)}` : `${Math.ceil(p.hp)}/${p.maxHp}`, bx + 5, y + 44, '#fff', 11);
   bar(ctx, bx, y + 50, bw, 7, p.st / 100, '#d6c26a');
-  bar(ctx, bx, y + 61, bw, 5, p.xp / xpNeed(p.lvl), '#8a7ad6');
+  bar(ctx, bx, y + 61, bw * 0.48, 5, p.food / 100, p.food < 25 ? '#e06a3a' : '#e8b08a');
+  bar(ctx, bx + bw * 0.52, y + 61, bw * 0.48, 5, p.armor / 120, '#9ab0c8');
+  bar(ctx, bx, y + 69, bw, 3, p.xp / xpNeed(p.lvl), '#8a7ad6');
   // оружие
   const W = wep(p), wx = x + 258, wy = y + 14;
   ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(wx, wy, 62, 44); ctx.strokeStyle = OL; ctx.lineWidth = 2; ctx.strokeRect(wx, wy, 62, 44);
@@ -629,7 +635,7 @@ function drawPlayerPanel(ctx, p, x, y) {
   // слоты способностей
   for (let k = 0; k < 3; k++) {
     const id = p.slots[k], sx = bx + k * 40, sy = y + 70;
-    slotBox(ctx, sx, sy, 30, id ? ABIL[id].icon : null, '', id && p.abCd[id] > 0 ? p.abCd[id] / ABIL[id].cd : 0, Input.btn(p.i, 'ab' + (k + 1)));
+    slotBox(ctx, sx, sy + 4, 28, id ? ABIL[id].icon : null, '', id && p.abCd[id] > 0 ? p.abCd[id] / ABIL[id].cd : 0, Input.btn(p.i, 'ab' + (k + 1)));
   }
   if (p.state === 'atk' && p.comboN >= 2) inkText(ctx, `Комбо ×${p.comboN}`, bx + 124, y + 90, '#ffe08a', 13);
 

@@ -25,11 +25,12 @@ const THROWN = {
   bottle: { name: 'Бутылка', dmg: 22, stun: 0.4 },
   molotov: { name: 'Коктейль Молотова', dmg: 15, stun: 0.2, fire: true },
   tknife: { name: 'Метательный нож', dmg: 34, stun: 0.3, keep: true },
+  bomb: { name: 'Самодельная бомба', dmg: 10, stun: 0.3, bomb: true },
 };
 
 const RES = {
   wood: { name: 'Дерево', col: '#e6cfa0' }, scrap: { name: 'Хлам', col: '#c8d2d8' }, cloth: { name: 'Ткань', col: '#d8c8a8' },
-  fuel: { name: 'Топливо', col: '#e08a6a' }, ammo: { name: 'Патроны', col: '#e0c070' },
+  fuel: { name: 'Топливо', col: '#e08a6a' }, ammo: { name: 'Патроны', col: '#e0c070' }, food: { name: 'Еда', col: '#e8b08a' },
 };
 
 // ===== Монстры (бестиарий концепта: 9 существ) =====
@@ -62,16 +63,18 @@ const RECIPES = [
   { id: 'repair', name: 'Починить оружие в руках', cost: { scrap: 2 }, desc: 'Полная прочность' },
   { id: 'spiked', name: 'Бита с гвоздями', cost: { scrap: 3 }, eng: 2, need: 'bat', desc: 'Нужна бита в руках и Инж. 2' },
   { id: 'tknife', name: 'Метательные ножи ×2', cost: { scrap: 2 }, eng: 1, desc: 'Нужна Инженерия 1' },
+  { id: 'bomb', name: 'Самодельная бомба', cost: { scrap: 2, fuel: 1 }, eng: 3, desc: 'Взрыв через секунду. Инженерия 3' },
+  { id: 'armor', name: 'Самодельная броня', cost: { scrap: 4, cloth: 2 }, eng: 3, desc: '−35% урона, пока цела. Инженерия 3' },
 ];
 
 // ===== Добыча по зонам =====
 // [вес, что] — 'r:wood' ресурс, 'w:knife' оружие, 't:bottle' метательное, 'band' бинт
 const LOOT = {
-  forest: [[5, 'r:wood'], [2, 'r:cloth'], [1, 'r:scrap'], [1, 'band'], [0.5, 'w:axe'], [0.6, 't:bottle']],
-  town: [[3, 'r:cloth'], [2, 'band'], [2, 'r:scrap'], [1, 'r:ammo'], [0.6, 'w:knife'], [0.5, 'w:crowbar'], [0.4, 'w:bat'], [0.3, 'w:pistol'], [1, 't:bottle'], [0.6, 'r:fuel']],
-  industrial: [[5, 'r:scrap'], [2, 'r:fuel'], [1, 'r:ammo'], [0.8, 'w:pipe'], [0.5, 'w:sledge'], [0.5, 'w:crowbar'], [0.6, 't:brick']],
-  farm: [[3, 'r:wood'], [3, 'r:cloth'], [2, 'r:fuel'], [0.6, 'w:axe'], [0.4, 'w:shotgun'], [1, 'band']],
-  lab: [[3, 'band'], [2, 'r:ammo'], [2, 'r:scrap'], [0.6, 'w:shotgun'], [0.6, 'w:pistol'], [1, 'r:cloth']],
+  forest: [[1, 'r:food'], [5, 'r:wood'], [2, 'r:cloth'], [1, 'r:scrap'], [1, 'band'], [0.5, 'w:axe'], [0.6, 't:bottle']],
+  town: [[3, 'r:food'], [0.3, 'armor'], [3, 'r:cloth'], [2, 'band'], [2, 'r:scrap'], [1, 'r:ammo'], [0.6, 'w:knife'], [0.5, 'w:crowbar'], [0.4, 'w:bat'], [0.3, 'w:pistol'], [1, 't:bottle'], [0.6, 'r:fuel']],
+  industrial: [[0.5, 'armor'], [0.4, 't:bomb'], [5, 'r:scrap'], [2, 'r:fuel'], [1, 'r:ammo'], [0.8, 'w:pipe'], [0.5, 'w:sledge'], [0.5, 'w:crowbar'], [0.6, 't:brick']],
+  farm: [[4, 'r:food'], [3, 'r:wood'], [3, 'r:cloth'], [2, 'r:fuel'], [0.6, 'w:axe'], [0.4, 'w:shotgun'], [1, 'band']],
+  lab: [[0.6, 'armor'], [3, 'band'], [2, 'r:ammo'], [2, 'r:scrap'], [0.6, 'w:shotgun'], [0.6, 'w:pistol'], [1, 'r:cloth']],
 };
 function rollLoot(zone) {
   const t = LOOT[zone] || LOOT.forest;

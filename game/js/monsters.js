@@ -49,6 +49,7 @@ function killEnemy(e, by) {
 }
 
 function targetPlayer(e) {
+  if (e.state === 'held') return null;
   let best = null, bd = 1e9;
   for (const p of G.players) { if (!alive(p)) continue; const d = dist2(e.x, e.y, p.x, p.y); if (d < bd) { bd = d; best = p; } }
   return best;
@@ -69,6 +70,13 @@ function updateEnemy(e, dt) {
   const d = EDEF[e.type];
   e.flash -= dt; e.hitT -= dt;
   if (e.state === 'dying') { e.t -= dt; if (e.t <= 0) e.dead = true; return; }
+  if (e.state === 'thrownE') return;
+  if (e.state === 'held') {
+    const h = e.holder;
+    e.t -= dt;
+    if (!h || !alive(h) || !h.held || h.held.ref !== e || e.t <= 0) { if (h && h.held && h.held.ref === e) h.held = null; e.state = 'move'; e.holder = null; e.stun = 0.2; if (h) { e.x = h.x + 20; e.y = h.y; } return; }
+    e.x = h.x; e.y = h.y - 1; return;
+  }
   if (e.state === 'cling') {
     const h = e.host;
     if (!h || !alive(h)) { e.state = 'move'; e.host = null; return; }
@@ -310,6 +318,11 @@ function updateHazards(dt) {
     if (Math.random() < 0.6) part(f.x + rand(-f.r, f.r) * 0.8, f.y + rand(-f.r, f.r) * 0.5, 4, rand(-10, 10), rand(-5, 5), rand(80, 160), 0.7, Math.random() < 0.5 ? '#ffb040' : '#ff6a20', 3, -60);
     for (const p of G.players) if (alive(p) && dist(p.x, p.y, f.x, f.y) < f.r) { p.burnT = (p.burnT || 0) + dt; if (p.burnT > 0.6) { p.burnT = 0; p.inv = 0; hurtPlayer(p, 4, null); } }
     if (f.t <= 0) G.fires.splice(i, 1);
+  }
+  for (let i = G.bombs.length - 1; i >= 0; i--) {
+    const b = G.bombs[i]; b.t -= dt;
+    if (Math.random() < 0.6) part(b.x, b.y - 18, 10, rand(-20, 20), 0, 60, 0.4, '#ffb040', 3, -40);
+    if (b.t <= 0) { G.bombs.splice(i, 1); explode(b.x, b.y, 115, 85); }
   }
   // бочки с горючим
   for (const pr of World.props) if (pr.fuse) { pr.fuse -= dt; if (Math.random() < 0.5) part(pr.x + 11, pr.y - 20, 10, rand(-20, 20), 0, 60, 0.4, '#ffb040', 3, -40); if (pr.fuse <= 0) explodeProp(pr); }

@@ -7,7 +7,7 @@ function makePlayer(i, x, y) {
   return {
     i, x, y, r: 13, face: i ? Math.PI : 0, kx: 0, ky: 0, hp: 100, maxHp: 100, st: 100, state: 'normal', t: 0,
     weapon: { type: 'bat', dur: WEAPONS.bat.durab }, atk: null, comboN: 0, queue: null, gunCd: 0, sinceRoll: 9,
-    slots: [null, null, null], abCd: {}, menuTab: 0, abSel: 0,
+    slots: [null, null, null], abCd: {}, menuTab: 0, abSel: 0, food: 100, armor: 0, counterT: 0, hungerT: 0,
     rollDx: 0, rollDy: 0, inv: 0, hurtT: 0, held: null, clingers: [], shake: 0, bleed: 0, revive: 0, reviveTgt: null,
     search: null, webT: 0, slowT: 0, xp: 0, lvl: 1, pts: 0, sk: { str: 0, agi: 0, eng: 0, mar: 0, med: 0, oth: 0 },
     menu: false, menuSel: 0, craft: false, craftSel: 0, anim: 0, moving: false, rollStrike: 0, hint: '', kills: 0, throwT: 0, regenT: 0,
@@ -71,6 +71,12 @@ function updatePlayer(p, c, dt) {
     }
     return;
   }
+  // голод: тает со временем; на нуле — медленная выносливость и потеря здоровья
+  p.counterT = Math.max(0, p.counterT - dt);
+  const was = p.food;
+  p.food = Math.max(0, p.food - dt * 0.22);
+  if (was >= 25 && p.food < 25) floatText(p.x, p.y - 124, 'Голодно... (еда: ' + Input.btn(p.i, 'eat') + ')', '#e8b08a', 14);
+  if (p.food <= 0 && p.hp > 20) { p.hungerT += dt; if (p.hungerT > 2) { p.hungerT = 0; p.hp -= 1; } }
   if (p.sk.med >= 4 && p.hp < p.maxHp) { p.regenT += dt; if (p.regenT > 1) { p.regenT = 0; p.hp = Math.min(p.maxHp, p.hp + 1); } }
 
   // меню навыков / крафта
@@ -95,7 +101,7 @@ function updatePlayer(p, c, dt) {
     else { menuNav(p, c, 'craftSel', RECIPES.length, () => craft(p, RECIPES[p.craftSel]), () => { p.craft = false; }); collideWorld(p, p.r, null); return; }
   }
 
-  if (p.state !== 'roll' && p.state !== 'atk') p.st = Math.min(100, p.st + 30 * dt);
+  if (p.state !== 'roll' && p.state !== 'atk') p.st = Math.min(100, p.st + (p.food > 0 ? 30 : 15) * dt);
   const mv = Math.hypot(c.mx, c.my);
   p.moving = mv > 0.1;
   const busy = p.state === 'light' || p.state === 'atk' || p.state === 'dash';
@@ -142,6 +148,10 @@ function updatePlayer(p, c, dt) {
       if (p.t <= 0) { p.state = 'normal'; p.sinceRoll = 0; if (p.sk.agi >= 3) p.rollStrike = 0.5; }
       break;
     }
+    case 'knock':
+      p.t -= dt; p.moving = false;
+      if (p.t <= 0) { p.state = 'normal'; p.inv = Math.max(p.inv, 0.4); }
+      break;
     case 'light':
       p.t += dt; if (p.t >= p.atk.dur) endAttack(p);
       p.x += c.mx * spd * 0.35 * dt; p.y += c.my * spd * 0.35 * dt;
@@ -160,6 +170,7 @@ function updatePlayer(p, c, dt) {
   }
   if (p.moving) p.anim += dt * 10 * (spd / 160);
 
+  if (p.state === 'knock') { collideWorld(p, p.r, null); return; }
   // ---- кнопки ----
   if (peekBuf(p, 'roll') && p.state !== 'roll' && p.state !== 'dash' && !(p.state === 'atk' && p.t >= p.atk.wind && p.t < p.atk.wind + p.atk.act) && takeBuf(p, 'roll')) {
     if (p.clingers.length) {
@@ -169,7 +180,7 @@ function updatePlayer(p, c, dt) {
     } else {
       const cost = Math.max(10, 25 - 3 * p.sk.agi - (p.sk.agi >= 4 ? 3 : 0));
       if (p.st >= cost && !(p.held && p.held.kind === 'furn')) {
-        p.st -= cost; p.state = 'roll'; p.t = 0.3; p.atk = null; p.queue = null; p.search = null;
+        p.st -= cost; p.state = 'roll'; p.t = 0.3; p.perfectDone = false; p.atk = null; p.queue = null; p.search = null;
         if (mv > 0.1) { p.rollDx = c.mx / mv; p.rollDy = c.my / mv; } else { p.rollDx = Math.cos(p.face); p.rollDy = Math.sin(p.face); }
         p.inv = Math.max(p.inv, 0.3); p.reviveTgt = null;
         Sfx.play('roll'); burst(p.x, p.y, 2, 4, '#4a4232', 60, 3, 0.4);
@@ -188,8 +199,9 @@ function updatePlayer(p, c, dt) {
   if (c.pressed.build && p.state === 'normal') buildOrRepair(p);
   if (c.pressed.trap && p.state === 'normal') placeTrap(p);
   if (c.pressed.heal && p.state === 'normal') useBandage(p);
+  if (c.pressed.eat && p.state === 'normal') eat(p);
 
-  collideWorld(p, p.r, null);
+  collideWorld(p, p.r, p.state === 'roll' && p.sk.agi >= 1 ? { low: true } : null);
   if (p.held && p.held.kind === 'furn') { const f = p.held.ref; f.x = p.x - f.w / 2; f.y = p.y - f.h / 2; }
   computeHint(p);
 }
@@ -392,6 +404,8 @@ function meleeHit(p) {
   let crit = '';
   if (p.rollStrike > 0) { dmg *= 2; p.rollStrike = 0; crit = 'Удар с переката!'; }
   if (a.weak) dmg *= 0.6;
+  let cstun = 0;
+  if (p.counterT > 0) { dmg *= 2; cstun = 0.8; p.counterT = 0; crit = 'Контратака!'; }
   if (a.hitsDone === 1 && (p.comboN || 0) >= 3) crit = crit || M.name + '!';
   const reach = B.reach + (M.reachAdd || 0), arc = M.arc;
   const kb = (heavy ? W.H.kb * (p.sk.str >= 3 ? 1.3 : 1) : W.L.kb) * (M.kb || 1);
@@ -399,7 +413,7 @@ function meleeHit(p) {
   let hit = 0;
   const cx = p.x + Math.cos(p.face) * reach * 0.6, cy = p.y + Math.sin(p.face) * reach * 0.6;
   for (const e of G.enemies) {
-    if (e.dead || e.state === 'dying' || e.state === 'cling' || a.hitSet.has(e)) continue;
+    if (e.dead || e.state === 'dying' || e.state === 'cling' || e.state === 'held' || e.state === 'thrownE' || a.hitSet.has(e)) continue;
     const d = dist(p.x, p.y, e.x, e.y), ang = Math.atan2(e.y - p.y, e.x - p.x);
     const inArc = d <= reach + e.r && (Math.abs(angDiff(p.face, ang)) <= arc || d <= e.r + p.r + 4);
     const inAoe = M.aoe && dist(cx, cy, e.x, e.y) < M.aoe + e.r;
@@ -407,7 +421,7 @@ function meleeHit(p) {
     let dd = dmg;
     if (M.back && Math.abs(angDiff(e.face, ang)) < 1.0) { dd *= M.back; crit = 'В спину!'; }
     if (p.sk.mar >= 5 && (e.stun > 0 || e.frozen > 0)) dd *= 2;
-    damageEnemy(e, dd, p, kb, stun);
+    damageEnemy(e, dd, p, kb, stun + cstun);
     a.hitSet.add(e);
     if (M.launch && p.sk.mar >= 3 && e.type !== 'titan' && e.type !== 'brute') e.thrown = 0.6;
     hit++;
@@ -460,7 +474,15 @@ function shakeOffClingers(p) {
 }
 
 function hurtPlayer(p, dmg, src) {
-  if (!alive(p) || p.inv > 0) return;
+  if (!alive(p)) return;
+  // идеальный уворот: удар пришёл в первые мгновения переката
+  if (src && p.state === 'roll' && 0.3 - p.t < 0.17 && !p.perfectDone) {
+    p.perfectDone = true; p.counterT = 1.6; G.slowT = 0.45;
+    floatText(p.x, p.y - 124, 'Идеальный уворот!', '#bfe8ff', 17); Sfx.play('blink');
+    G.waves.push({ x: p.x, y: p.y - 30, r: 10, max: 70, a: 0, arc: Math.PI, col: '190,230,255', t: 0.3 });
+    return;
+  }
+  if (p.inv > 0) return;
   // мебель в руках — щит от ударов спереди
   if (src && p.held && p.held.kind === 'furn') {
     const a = Math.atan2(src.y - p.y, src.x - p.x);
@@ -471,12 +493,18 @@ function hurtPlayer(p, dmg, src) {
       if (f.hp <= 0) { p.held = null; f.carried = false; destroyStruct(f); }
     }
   }
+  if (p.armor > 0) { const a = dmg * 0.35; p.armor = Math.max(0, p.armor - a); dmg -= a; if (p.armor <= 0) floatText(p.x, p.y - 124, 'Броня разбита!', '#b0c0d0', 14); }
   p.hp -= dmg; p.inv = 0.45; p.hurtT = 0.3; p.reviveTgt = null; p.revive = 0; p.search = null;
   if (src) { const a = Math.atan2(p.y - src.y, p.x - src.x); p.kx += Math.cos(a) * 260; p.ky += Math.sin(a) * 260; }
   burst(p.x, p.y, 30, 6, '#7a1a14', 140, 3);
   addShake(4); Sfx.play('hurt');
   if (p.state === 'light' || (p.state === 'atk' && p.t < p.atk.wind && p.sk.str < 3)) { p.state = 'normal'; p.atk = null; }
-  if (p.hp <= 0) downPlayer(p);
+  if (p.hp <= 0) { downPlayer(p); return; }
+  // мощный удар сбивает с ног (Сила 4 — устоять)
+  if (src && dmg >= 22 && p.sk.str < 4 && p.state !== 'roll') {
+    p.state = 'knock'; p.t = 0.75; p.atk = null; p.inv = 0.9; dropHeld(p, true);
+    p.kx *= 1.6; p.ky *= 1.6;
+  }
 }
 
 function downPlayer(p) {
@@ -489,6 +517,12 @@ function downPlayer(p) {
   Sfx.play('down'); stain(p.x, p.y, 'rgba(70,10,8,0.6)', 18);
 }
 
+function eat(p) {
+  if (G.team.food <= 0) { floatText(p.x, p.y - 116, 'Нет еды', '#ff9a8a', 14); Sfx.play('deny'); return; }
+  if (p.food > 85) { floatText(p.x, p.y - 116, 'Не голоден', '#bbb', 13); return; }
+  G.team.food--; p.food = Math.min(100, p.food + 45); p.hp = Math.min(p.maxHp, p.hp + 8);
+  floatText(p.x, p.y - 116, 'Ням', '#e8b08a', 15); Sfx.play('pickup');
+}
 function useBandage(p) {
   if (G.team.band <= 0) { floatText(p.x, p.y - 116, 'Нет бинтов', '#ff9a8a', 14); Sfx.play('deny'); return; }
   const o = G.players[1 - p.i];
@@ -507,6 +541,10 @@ function interactTarget(p) {
   if (o.state === 'downed' && dist(p.x, p.y, o.x, o.y) < 60) return { t: 'revive', o };
   if (alive(o) && o.clingers.length && !p.clingers.length && dist(p.x, p.y, o.x, o.y) < 72) return { t: 'unclinger', o };
   if (p.held) return { t: 'drop' };
+  if (p.sk.str >= 3) for (const e of G.enemies) {
+    if (e.dead || e.state === 'dying' || e.state === 'held' || !(e.stun > 0.15 || e.frozen > 0) || ['brute', 'titan', 'void'].includes(e.type)) continue;
+    if (dist(p.x, p.y, e.x, e.y) < e.r + 40) return { t: 'grab', e };
+  }
   const fx = p.x + Math.cos(p.face) * 18, fy = p.y + Math.sin(p.face) * 18;
   let best = null, bd = 1e9;
   const consider = (d, lim, obj) => { if (d < lim && d < bd) { bd = d; best = obj; } };
@@ -538,6 +576,11 @@ function interact(p) {
       break;
     }
     case 'drop': dropHeld(p, false); break;
+    case 'grab': {
+      const e = t.e;
+      e.state = 'held'; e.holder = p; e.t = 3; p.held = { kind: 'enemy', ref: e };
+      floatText(p.x, p.y - 140, 'Схватил!', '#ffe08a', 15); Sfx.play('hitH'); break;
+    }
     case 'item': {
       const it = t.it;
       if (it.cat === 'w') {
@@ -594,6 +637,7 @@ function searchProp(p, pr) {
 
 function dropFromLoot(v, x, y) {
   if (v === 'band') dropPickup('band', x, y);
+  else if (v === 'armor') dropPickup('armor', x, y);
   else if (v.startsWith('r:')) { const k = v.slice(2); dropPickup(k, x, y); if (k === 'ammo') dropPickup(k, x, y); }
   else if (v.startsWith('w:')) { const t = v.slice(2); G.items.push({ cat: 'w', type: t, dur: Math.round(WEAPONS[t].durab * rand(0.5, 1)), x: x + rand(-14, 14), y: y + rand(-4, 8), held: false, fly: false }); }
   else if (v.startsWith('t:')) G.items.push({ cat: 't', kind: v.slice(2), x: x + rand(-14, 14), y: y + rand(-4, 8), held: false, fly: false });
@@ -612,6 +656,8 @@ function craft(p, r) {
     case 'ammo': G.team.ammo += 6; break;
     case 'repair': p.weapon.dur = WEAPONS[p.weapon.type].durab; break;
     case 'spiked': p.weapon = { type: 'spiked', dur: WEAPONS.spiked.durab }; break;
+    case 'bomb': G.items.push({ cat: 't', kind: 'bomb', x: bx, y: by, held: false, fly: false }); break;
+    case 'armor': p.armor = 120; break;
     case 'tknife': for (let i = 0; i < 2; i++) G.items.push({ cat: 't', kind: 'tknife', x: bx - 10 + i * 20, y: by, held: false, fly: false }); break;
   }
   floatText(p.x, p.y - 124, `Сделано: ${r.name}`, '#d8ffb0', 15); Sfx.play('craft');
@@ -620,6 +666,7 @@ function craft(p, r) {
 function dropHeld(p, forced) {
   if (!p.held) return;
   const h = p.held;
+  if (h.kind === 'enemy') { const e = h.ref; e.state = 'move'; e.holder = null; e.stun = 0.6; e.x = p.x + Math.cos(p.face) * 24; e.y = p.y + Math.sin(p.face) * 24; p.held = null; return; }
   if (h.kind === 'item') { h.ref.held = false; h.ref.x = p.x + Math.cos(p.face) * 16; h.ref.y = p.y + Math.sin(p.face) * 16 + 2; p.held = null; return; }
   const f = h.ref, d = p.r + Math.max(f.w, f.h) / 2 + 6;
   for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
@@ -635,7 +682,8 @@ function throwHeld(p, strong) {
   const h = p.held;
   if (h.kind === 'furn' && p.sk.str < 2) { dropHeld(p, false); return; }
   const a = p.face, sp = (h.kind === 'furn' ? 420 : 560) * (strong ? 1.25 : 1);
-  const pr = { kind: h.kind === 'furn' ? 'furn' : h.ref.kind, ref: h.ref, x: p.x + Math.cos(a) * 18, y: p.y + Math.sin(a) * 18, z: 40, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: 140, owner: p, hit: new Set() };
+  if (h.kind === 'enemy') { h.ref.state = 'thrownE'; h.ref.holder = null; }
+  const pr = { kind: h.kind === 'furn' ? 'furn' : h.kind === 'enemy' ? 'enemy' : h.ref.kind, ref: h.ref, x: p.x + Math.cos(a) * 18, y: p.y + Math.sin(a) * 18, z: 40, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: 140, owner: p, hit: new Set() };
   if (h.kind === 'item') h.ref.fly = true;
   G.projs.push(pr); p.held = null; p.throwT = 0.3;
   Sfx.play('throw');
@@ -717,6 +765,7 @@ function computeHint(p) {
   const t = interactTarget(p);
   if (t) {
     const n = {
+      grab: `${b('interact')}: схватить`,
       revive: `держи ${b('interact')}: поднять`, unclinger: `${b('interact')}: сорвать паразита`, furn: `${b('interact')}: взять`,
       bench: `${b('interact')}: верстак (крафт)`, gen: `${b('interact')}: заправить генератор`,
       search: `держи ${b('interact')}: обыскать`,
@@ -777,7 +826,8 @@ function updatePickups(dt) {
       const d = dist(p.x, p.y, k.x, k.y);
       if (d < 70) { const a = Math.atan2(p.y - k.y, p.x - k.x); k.x += Math.cos(a) * 260 * dt; k.y += Math.sin(a) * 260 * dt; }
       if (d < 22) {
-        if (k.kind === 'band' || !RES[k.kind]) { G.team.band++; floatText(p.x, p.y - 116, '+1 бинт', '#9fe39a', 13); }
+        if (k.kind === 'armor') { if (p.armor >= 100) continue; p.armor = 120; floatText(p.x, p.y - 116, 'Броня!', '#b0c0d0', 14); }
+        else if (k.kind === 'band' || !RES[k.kind]) { G.team.band++; floatText(p.x, p.y - 116, '+1 бинт', '#9fe39a', 13); }
         else { G.team[k.kind]++; floatText(p.x, p.y - 116, `+1 ${RES[k.kind].name.toLowerCase()}`, RES[k.kind].col, 13); }
         Sfx.play('pickup'); G.pickups.splice(i, 1); break;
       }
@@ -790,11 +840,13 @@ function updateProjs(dt) {
     const pr = G.projs[i];
     pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.vz -= 900 * dt; pr.z += pr.vz * dt;
     let land = pr.z <= 0;
-    const r = pr.kind === 'furn' ? 22 : 8;
+    const r = pr.kind === 'furn' || pr.kind === 'enemy' ? 22 : 8;
     for (const e of G.enemies) {
-      if (e.dead || e.state === 'dying' || e.state === 'cling' || pr.hit.has(e)) continue;
+      if (e.dead || e.state === 'dying' || e.state === 'cling' || e.state === 'held' || e.state === 'thrownE' || pr.hit.has(e)) continue;
+      if (e === pr.ref) continue;
       if (dist(pr.x, pr.y, e.x, e.y) < e.r + r) {
         pr.hit.add(e);
+        if (pr.kind === 'enemy') { damageEnemy(e, 40 + 8 * pr.owner.sk.str, pr, 420, 1); floatText(e.x, e.y - 60, 'Сбил!', '#ffe08a', 14); addShake(4); continue; }
         const th = THROWN[pr.kind];
         const dmg = pr.kind === 'furn' ? 55 + 10 * pr.owner.sk.str : th.dmg;
         damageEnemy(e, dmg, pr, pr.kind === 'furn' ? 450 : 220, pr.kind === 'furn' ? 1 : th.stun);
@@ -810,13 +862,20 @@ function updateProjs(dt) {
     if (!land) continue;
     G.projs.splice(i, 1);
     const th = THROWN[pr.kind];
-    if (pr.kind === 'furn') {
+    if (pr.kind === 'enemy') {
+      const e = pr.ref; e.x = pr.x; e.y = pr.y; e.state = 'move'; collideWorld(e, e.r, null);
+      damageEnemy(e, 30 + 6 * pr.owner.sk.str, { x: pr.x - pr.vx, y: pr.y - pr.vy }, 200, 1.2);
+      burst(pr.x, pr.y, 4, 14, '#4a4232', 200, 4); addShake(6); Sfx.play('slam');
+    } else if (pr.kind === 'furn') {
       const f = pr.ref;
       let x = pr.x - f.w / 2, y = pr.y - f.h / 2, placed = false;
       for (let k = 0; k < 14 && !placed; k++) { if (canPlace(x, y, f.w, f.h, f)) placed = true; else { x -= pr.vx * 0.02; y -= pr.vy * 0.02; } }
       if (!placed) { x = pr.owner.x - f.w / 2; y = pr.owner.y + 20; }
       f.x = x; f.y = y; f.carried = false; f.solid = placed; if (!placed) f.ghost = 1.5;
       damageStruct(f, 15); G.flowDirty = true; addShake(4);
+    } else if (th.bomb) {
+      pr.ref.fly = false; const k = G.items.indexOf(pr.ref); if (k >= 0) G.items.splice(k, 1);
+      G.bombs.push({ x: pr.x, y: pr.y, t: 1.0 }); Sfx.play('hiss');
     } else if (th.keep) { pr.ref.fly = false; pr.ref.x = pr.x; pr.ref.y = pr.y; Sfx.play('wood'); }
     else {
       pr.ref.fly = false; const k = G.items.indexOf(pr.ref); if (k >= 0) G.items.splice(k, 1);
