@@ -7,7 +7,7 @@ function makePlayer(i, x, y) {
   return {
     i, x, y, r: 13, face: i ? Math.PI : 0, kx: 0, ky: 0, hp: 100, maxHp: 100, st: 100, state: 'normal', t: 0,
     weapon: { type: 'bat', dur: WEAPONS.bat.durab }, atk: null, comboN: 0, queue: null, gunCd: 0, sinceRoll: 9,
-    slots: [null, null, null], abCd: {}, menuTab: 0, abSel: 0, food: 100, armor: 0, counterT: 0, hungerT: 0,
+    slots: [null, null, null], bag: null, pickW: null, abCd: {}, menuTab: 0, abSel: 0, food: 100, armor: 0, counterT: 0, hungerT: 0,
     rollDx: 0, rollDy: 0, inv: 0, hurtT: 0, held: null, clingers: [], shake: 0, bleed: 0, revive: 0, reviveTgt: null,
     search: null, webT: 0, slowT: 0, xp: 0, lvl: 1, pts: 0, sk: { str: 0, agi: 0, eng: 0, mar: 0, med: 0, oth: 0 },
     menu: false, menuSel: 0, craft: false, craftSel: 0, anim: 0, moving: false, rollStrike: 0, hint: '', kills: 0, throwT: 0, regenT: 0,
@@ -127,6 +127,12 @@ function updatePlayer(p, c, dt) {
       }
     }
   }
+  // подбор оружия удержанием
+  if (p.pickW) {
+    const it = p.pickW.it;
+    if (!c.down.interact || G.items.indexOf(it) < 0 || dist(p.x, p.y, it.x, it.y) > 60) p.pickW = null;
+    else if ((p.pickW.t += dt) >= 0.4) { p.pickW = null; takeWeapon(p, it); }
+  }
   // обыск
   if (p.search) {
     const s = p.search;
@@ -145,7 +151,7 @@ function updatePlayer(p, c, dt) {
       if (p.sk.agi >= 5) for (const e of G.enemies) if (!e.dead && e.state !== 'cling' && e.type !== 'titan' && dist(p.x, p.y, e.x, e.y) < p.r + e.r + 4) {
         e.kx += p.rollDx * 300 / e.mass; e.ky += p.rollDy * 300 / e.mass; e.stun = Math.max(e.stun, 0.5);
       }
-      if (p.t <= 0) { p.state = 'normal'; p.sinceRoll = 0; if (p.sk.agi >= 3) p.rollStrike = 0.5; }
+      if (p.t <= 0) { burst(p.x, p.y, 2, 8, '#5a5040', 110, 3, 0.45); p.state = 'normal'; p.sinceRoll = 0; if (p.sk.agi >= 3) p.rollStrike = 0.5; }
       break;
     }
     case 'knock':
@@ -180,7 +186,7 @@ function updatePlayer(p, c, dt) {
     } else {
       const cost = Math.max(10, 25 - 3 * p.sk.agi - (p.sk.agi >= 4 ? 3 : 0));
       if (p.st >= cost && !(p.held && p.held.kind === 'furn')) {
-        p.st -= cost; p.state = 'roll'; p.t = 0.3; p.perfectDone = false; p.atk = null; p.queue = null; p.search = null;
+        p.st -= cost; p.state = 'roll'; p.t = 0.32; burst(p.x, p.y, 2, 6, '#5a5040', 90, 3, 0.4); p.perfectDone = false; p.atk = null; p.queue = null; p.search = null;
         if (mv > 0.1) { p.rollDx = c.mx / mv; p.rollDy = c.my / mv; } else { p.rollDx = Math.cos(p.face); p.rollDy = Math.sin(p.face); }
         p.inv = Math.max(p.inv, 0.3); p.reviveTgt = null;
         Sfx.play('roll'); burst(p.x, p.y, 2, 4, '#4a4232', 60, 3, 0.4);
@@ -200,6 +206,7 @@ function updatePlayer(p, c, dt) {
   if (c.pressed.trap && p.state === 'normal') placeTrap(p);
   if (c.pressed.heal && p.state === 'normal') useBandage(p);
   if (c.pressed.eat && p.state === 'normal') eat(p);
+  if (c.pressed.swap && p.state === 'normal') swapWeapon(p);
 
   collideWorld(p, p.r, p.state === 'roll' && p.sk.agi >= 1 ? { low: true } : null);
   if (p.held && p.held.kind === 'furn') { const f = p.held.ref; f.x = p.x - f.w / 2; f.y = p.y - f.h / 2; }
@@ -258,13 +265,19 @@ function startMove(p, id, M) {
   let weak = false;
   if (M.base === 'H') { if (p.st >= 16) p.st -= 16; else weak = true; }
   p.state = 'atk'; p.t = 0;
-  p.atk = { id, M, B, wind, act: Math.max(0.07, M.act), rec, hitsDone: 0, hits: M.hits || 1, weak, queued: null, hitSet: new Set(), anim: animFor(id, M, WCLASS[p.weapon.type]) };
+  p.atk = { id, M, B, wind, act: Math.max(0.07, M.act), rec, charge: 0, charging: M.base === 'H' && !M.anim, hitsDone: 0, hits: M.hits || 1, weak, queued: null, hitSet: new Set(), anim: animFor(id, M, WCLASS[p.weapon.type]) };
   p.comboN = (p.comboN || 0) + 1;
   Sfx.play(M.base === 'H' ? 'heavy' : 'swing');
 }
 function updateAttack(p, c, dt, spd) {
   const a = p.atk, M = a.M;
   p.t += dt;
+  // держишь «тяжёлую» — замах удерживается и копит силу (до ×1.7), отпустил — удар
+  if (a.charging && p.t >= a.wind * 0.98) {
+    if (c.down.heavy && a.charge < 1.6) { a.charge += dt; p.t = a.wind * 0.98; p.st = Math.max(0, p.st - 6 * dt); }
+    else a.charging = false;
+  }
+  if (a.charging && !c.down.heavy && p.t < a.wind * 0.98) a.charging = false;
   const t0 = a.wind, t1 = a.wind + a.act;
   if (p.t >= t0 && a.hitsDone === 0 && M.lunge) { p.kx += Math.cos(p.face) * M.lunge; p.ky += Math.sin(p.face) * M.lunge; }
   // несколько попаданий за активную фазу (шквал, вращение)
@@ -418,6 +431,7 @@ function meleeHit(p) {
   let crit = '';
   if (p.rollStrike > 0) { dmg *= 2; p.rollStrike = 0; crit = 'Удар с переката!'; }
   if (a.weak) dmg *= 0.6;
+  if (a.charge > 0.25) { const k = Math.min(1, a.charge / 1.2); dmg *= 1 + 0.7 * k; if (k >= 1) crit = crit || 'Заряженный удар!'; }
   let cstun = 0;
   if (p.counterT > 0) { dmg *= 2; cstun = 0.8; p.counterT = 0; crit = 'Контратака!'; }
   if (a.hitsDone === 1 && (p.comboN || 0) >= 3) crit = crit || M.name + '!';
@@ -602,7 +616,8 @@ function interact(p) {
     }
     case 'item': {
       const it = t.it;
-      if (it.cat === 'w') {
+      if (it.cat === 'w') { p.pickW = { it, t: 0 }; return; }
+      if (false) {
         if (p.weapon.type !== 'fists') G.items.push({ cat: 'w', type: p.weapon.type, dur: p.weapon.dur, x: p.x + Math.cos(p.face + 2) * 14, y: p.y + 6, held: false, fly: false });
         p.weapon = { type: it.type, dur: it.dur };
         G.items.splice(G.items.indexOf(it), 1);
@@ -625,8 +640,12 @@ function interact(p) {
         return;
       }
       if (s.open) {
-        for (const q of G.players) if (q.state !== 'dead' && distToRect(q.x, q.y, s.x, s.y, s.w, s.h) < q.r) { Sfx.play('deny'); return; }
-        for (const e of G.enemies) if (!e.dead && distToRect(e.x, e.y, s.x, s.y, s.w, s.h) < e.r) { Sfx.play('deny'); return; }
+        for (const e of G.enemies) if (!e.dead && e.state !== 'dying' && distToRect(e.x, e.y, s.x, s.y, s.w, s.h) < e.r) { floatText(s.x + s.w / 2, s.y - 60, 'Мешает монстр', '#ff9a8a', 13); Sfx.play('deny'); return; }
+        for (const q of G.players) if (q.state !== 'dead' && distToRect(q.x, q.y, s.x, s.y, s.w, s.h) < q.r + 1) {
+          // шагнуть из проёма на свою сторону
+          if (s.horiz) q.y = q.y < s.y + s.h / 2 ? s.y - q.r - 2 : s.y + s.h + q.r + 2;
+          else q.x = q.x < s.x + s.w / 2 ? s.x - q.r - 2 : s.x + s.w + q.r + 2;
+        }
       }
       s.open = !s.open; s.solid = !s.open; G.flowDirty = true; Sfx.play('door');
       break;
@@ -644,6 +663,18 @@ function interact(p) {
   }
 }
 
+function takeWeapon(p, it) {
+  G.items.splice(G.items.indexOf(it), 1);
+  if (p.weapon.type === 'fists') p.weapon = { type: it.type, dur: it.dur };
+  else if (!p.bag) { p.bag = p.weapon; p.weapon = { type: it.type, dur: it.dur }; floatText(p.x, p.y - 140, `${WEAPONS[p.bag.type].name} → в сумку`, '#c8bca0', 13); }
+  else { G.items.push({ cat: 'w', type: p.weapon.type, dur: p.weapon.dur, x: p.x + Math.cos(p.face + 2) * 14, y: p.y + 6, held: false, fly: false }); p.weapon = { type: it.type, dur: it.dur }; }
+  floatText(p.x, p.y - 120, WEAPONS[it.type].name, '#f0e4c4', 15); Sfx.play('pickup');
+}
+function swapWeapon(p) {
+  if (!p.bag) { floatText(p.x, p.y - 116, 'В сумке пусто', '#bbb', 13); return; }
+  const t = p.weapon; p.weapon = p.bag; p.bag = t.type === 'fists' ? null : t;
+  floatText(p.x, p.y - 120, WEAPONS[p.weapon.type].name, '#f0e4c4', 15); Sfx.play('pickup');
+}
 function searchProp(p, pr) {
   pr.searched = G.day;
   const n = pr.spr === 'gaspump' ? 0 : randi(1, 2);
@@ -687,10 +718,13 @@ function dropHeld(p, forced) {
   const h = p.held;
   if (h.kind === 'enemy') { const e = h.ref; e.state = 'move'; e.holder = null; e.stun = 0.6; e.x = p.x + Math.cos(p.face) * 24; e.y = p.y + Math.sin(p.face) * 24; p.held = null; return; }
   if (h.kind === 'item') { h.ref.held = false; h.ref.x = p.x + Math.cos(p.face) * 16; h.ref.y = p.y + Math.sin(p.face) * 16 + 2; p.held = null; return; }
-  const f = h.ref, d = p.r + Math.max(f.w, f.h) / 2 + 6;
-  for (const da of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
-    const a = p.face + da;
-    const x = Math.round((p.x + Math.cos(a) * d - f.w / 2) / 4) * 4, y = Math.round((p.y + Math.sin(a) * d - f.h / 2) / 4) * 4;
+  const f = h.ref, fx = Math.cos(p.face), fy = Math.sin(p.face);
+  // расстояние до края предмета по направлению взгляда — ставим вплотную перед собой
+  const ext = Math.abs(fx) * f.w / 2 + Math.abs(fy) * f.h / 2;
+  const tries = [];
+  for (const dd of [2, 8, 14, 22]) for (const side of [0, 6, -6, 12, -12]) tries.push([p.r + ext + dd, side]);
+  for (const [d, sd] of tries) {
+    const x = Math.round(p.x + fx * d - fy * sd - f.w / 2), y = Math.round(p.y + fy * d + fx * sd - f.h / 2);
     if (canPlace(x, y, f.w, f.h, f)) { f.x = x; f.y = y; f.carried = false; f.solid = true; p.held = null; G.flowDirty = true; Sfx.play('build'); return; }
   }
   if (forced) { f.x = p.x - f.w / 2; f.y = p.y - f.h / 2; f.carried = false; f.solid = false; f.ghost = 1.5; p.held = null; G.flowDirty = true; }
@@ -790,7 +824,7 @@ function computeHint(p) {
       search: `держи ${b('interact')}: обыскать`,
     };
     if (t.t === 'door') p.hint = t.s.locked ? `Заперто` : `${b('interact')}: ${t.s.open ? 'закрыть' : 'открыть'}`;
-    else if (t.t === 'item') p.hint = `${b('interact')}: ${t.it.cat === 'w' ? 'взять ' + WEAPONS[t.it.type].name.toLowerCase() : 'поднять'}`;
+    else if (t.t === 'item') p.hint = t.it.cat === 'w' ? `держи ${b('interact')}: взять ${WEAPONS[t.it.type].name.toLowerCase()}` : `${b('interact')}: поднять`;
     else p.hint = n[t.t] || '';
     return;
   }

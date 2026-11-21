@@ -356,6 +356,7 @@ function drawAttack(ctx, p, A) {
   if (behind) drawW();
   ctx.save(); ctx.translate(p.x, y); ctx.scale(flipNow * sx, sy); ctx.drawImage(s.c, -s.ax, -s.ay, s.w, s.h); ctx.restore();
   if (!behind) drawW();
+  if (a.charging || a.charge > 0) { const k = Math.min(1, a.charge / 1.2); ctx.strokeStyle = OL; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(p.x, p.y - 126, 11, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke(); ctx.strokeStyle = k >= 1 ? '#ffd860' : '#f2e6c8'; ctx.lineWidth = 3.5; ctx.stroke(); if (k >= 1 && a.charging) { ctx.fillStyle = 'rgba(255,220,120,0.5)'; ctx.beginPath(); ctx.arc(h.x, h.y, 9 + Math.sin(G.t * 30) * 2, 0, TAU); ctx.fill(); } }
   // кисть поверх рукояти
   ctx.fillStyle = ART_META.skin[p.i]; ctx.strokeStyle = OL; ctx.lineWidth = 0.9;
   ctx.beginPath(); ctx.arc(h.x, h.y, 2.8, 0, TAU); ctx.fill(); ctx.stroke();
@@ -391,9 +392,13 @@ function drawPlayer(ctx, p) {
   if (p.inv > 0 && p.state !== 'roll' && p.state !== 'dash' && Math.floor(G.t * 20) % 2) ctx.globalAlpha = 0.55;
   if (front && back) drawWeapon(ctx, p, meta, bob);
   if (p.state === 'roll') {
-    const k = 1 - p.t / 0.3;
-    ctx.save(); ctx.translate(p.x, p.y - 24); ctx.rotate((flip ? -1 : 1) * k * TAU); ctx.scale(flip ? -1 : 1, 1);
-    ctx.drawImage(s.c, -s.ax, -s.ay + 24, s.w, s.h); ctx.restore();
+    // быстрый подскок: присед → полёт по дуге → приземление
+    const k = clamp(1 - p.t / 0.32, 0, 1), hop = Math.sin(k * Math.PI) * 22;
+    const fr = k < 0.15 || k > 0.85 ? A.a_leap1 : A.a_leap2;
+    const sq = k < 0.15 ? [1.08, 0.9] : k > 0.85 ? [1.1, 0.88] : [0.94, 1.06];
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 15 * (1 - hop / 60), 6, 0, 0, TAU); ctx.fill();
+    ctx.save(); ctx.translate(p.x, p.y - hop); ctx.rotate((flip ? -1 : 1) * 0.12 * Math.sin(k * Math.PI)); ctx.scale((flip ? -1 : 1) * sq[0], sq[1]);
+    ctx.drawImage(fr.c, -fr.ax, -fr.ay, fr.w, fr.h); ctx.restore();
   } else {
     let y = p.y;
     if (p.state === 'atk' && p.atk.M.pose === 'leap') { const k = clamp(p.t / (p.atk.wind + 0.05), 0, 1); y -= Math.sin(k * Math.PI) * 26; }
@@ -736,6 +741,12 @@ function drawPlayerHUD(ctx, p, ax, dir) {
     if (W.durab < Infinity) { const d = p.weapon.dur / W.durab; ctx.beginPath(); ctx.arc(wx, wy, 27, -Math.PI / 2, -Math.PI / 2 + TAU * d); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = d > 0.3 ? '#b8d080' : '#e06a3a'; ctx.lineWidth = 2.6; ctx.stroke(); }
   } else inkText(ctx, '✊', wx, wy + 8, '#e0c8a4', 22, true, 'center');
   inkText(ctx, W.gun ? `${W.name} ${G.team.ammo}` : W.name, wx, 82, '#c8bca0', 11, true, 'center');
+  // сумка со вторым оружием
+  const bx2 = wx + dir * 36, by2 = 62;
+  ctx.beginPath(); ctx.arc(bx2, by2, 14, 0, TAU); ctx.fillStyle = '#16110d'; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 2.5; ctx.stroke();
+  if (p.bag) { const s2 = Art.s['w_' + p.bag.type], k2 = Math.min(24 / s2.w, 14 / s2.h); ctx.save(); ctx.translate(bx2, by2); ctx.rotate(-0.7); ctx.drawImage(s2.c, -s2.w * k2 / 2, -s2.h * k2 / 2, s2.w * k2, s2.h * k2); ctx.restore(); }
+  glyph(ctx, Input.btn(p.i, 'swap'), bx2 + dir * 11, by2 + 11, 7);
+  if (p.pickW) { ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(wx, wy, 30, -Math.PI / 2, -Math.PI / 2 + TAU * p.pickW.t / 0.4); ctx.stroke(); }
   // способности
   for (let k = 0; k < 3; k++) {
     const id = p.slots[k], sx = X(118 + (dir > 0 ? k : 2 - k) * 44), sy = 112;

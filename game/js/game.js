@@ -158,6 +158,7 @@ function dawn() {
     e.state = 'dying'; e.t = 1; burst(e.x, e.y, 20, 8, '#c9b58a', 100, 4, 0.8);
   }
   G.spawnQ = [];
+  for (const e of G.enemies) { e.aggro = false; if (dist(e.x, e.y, World.fire.x, World.fire.y) < 900) { e.state = 'dying'; e.t = 1; } }
   for (const p of G.players) {
     if (p.state === 'dead') { p.state = 'normal'; p.hp = p.maxHp * 0.5; p.x = World.fire.x + (p.i ? 40 : -40); p.y = World.fire.y - 50; p.inv = 2; msg(`${pname(p)} вернулся к костру`, PAL[p.i].accent); }
     else if (p.state === 'downed') { p.state = 'normal'; p.hp = p.maxHp * 0.3; }

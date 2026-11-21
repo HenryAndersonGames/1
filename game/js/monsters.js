@@ -162,10 +162,12 @@ function updateEnemy(e, dt) {
       if (!p) { wander(e, dt); mx = Math.cos(e.wanderA) * spd * 0.3; my = Math.sin(e.wanderA) * spd * 0.3; break; }
       const dp = dist(e.x, e.y, p.x, p.y);
       if (!e.aggro) {
-        const sense = e.type === 'spider' ? 150 : e.type === 'wolf' ? (night ? 500 : 300) : 360;
+        const sense = !night ? 150 : e.type === 'spider' ? 150 : e.type === 'wolf' ? 500 : 360;
         if (dp < sense) { e.aggro = true; Sfx.play(e.type === 'wolf' ? 'howl' : 'growl'); }
         else { wander(e, dt); mx = Math.cos(e.wanderA) * spd * 0.35; my = Math.sin(e.wanderA) * spd * 0.35; if (e.type === 'spider' || e.type === 'void') { mx *= 0.3; my *= 0.3; } break; }
       }
+      // днём монстр бросает погоню, если игрок отошёл, и не подходит к базе
+      if (!night && !e.night && (dp > 420 || dist(e.x, e.y, World.fire.x, World.fire.y) < 520)) { e.aggro = false; e.wanderA = Math.atan2(e.home.y - e.y, e.home.x - e.x); e.wanderT = 3; break; }
       const los = dp < 320 && lineClear(e.x, e.y, p.x, p.y);
       // ---- особые приёмы ----
       if (e.type === 'clinger' && dp < e.r + p.r + 14 && e.cd <= 0 && p.state !== 'roll' && p.clingers.length < 3) {
