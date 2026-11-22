@@ -1,10 +1,12 @@
 package app.hardlimiter
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.audiofx.DynamicsProcessing
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -15,8 +17,8 @@ import kotlin.math.roundToInt
  * Звуковой движок.
  *
  * GLOBAL   — эффект DynamicsProcessing на глобальном выходе (сессия 0). Системная
- *            громкость медиа держится на максимуме, а реальная громкость (шаг 1/100)
- *            и жёсткий лимитер делаются цифровым усилением внутри эффекта.
+ *            громкость ставится на ближайший шаг, а доля шага (точность 1/100)
+ *            и жёсткий лимитер делаются цифрово внутри эффекта.
  * SESSIONS — глобальный эффект недоступен на этом устройстве: громкость идёт
  *            системными шагами, а лимитер вешается на сессии плееров, которые
  *            сообщают о себе (Spotify, VLC, Poweramp и др.).
@@ -36,8 +38,8 @@ class AudioEngine(private val ctx: Context) {
 
     private val deviceCallback = object : AudioDeviceCallback() {
         // У наушников и динамика своя системная громкость — переприменяем.
-        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) = apply()
-        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) = apply()
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>?) { tableDevice = -1; apply() }
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>?) { tableDevice = -1; apply() }
     }
 
     fun start() {
@@ -86,10 +88,20 @@ class AudioEngine(private val ctx: Context) {
         when (mode) {
             Mode.GLOBAL -> {
                 val g = global ?: return
-                // Сначала ставим ослабление в эффекте, и только потом поднимаем
-                // системную громкость — чтобы не было громкого щелчка.
-                configure(g, gain, thr)
-                setSystemMax()
+                // Гибрид: системная громкость — ближайший шаг НЕ НИЖЕ нужного уровня,
+                // цифрово добавляем только остаток (меньше одного шага).
+                // Так динамик работает на обычном уровне, а не на максимуме, где
+                // прошивка включает защиту/срез баса и звук портится.
+                val (idx, fine) = splitGain(gain)
+                val cur = am.getStreamVolume(STREAM)
+                if (idx > cur) {
+                    // Громче: сначала цифровое ослабление, потом шаг — без щелчка
+                    configure(g, fine, thr)
+                    setIndex(idx)
+                } else {
+                    setIndex(idx)
+                    configure(g, fine, thr)
+                }
             }
             Mode.SESSIONS -> {
                 setSystemSteps(LimiterState.volume)
@@ -109,7 +121,7 @@ class AudioEngine(private val ctx: Context) {
             false, 0,   // многополосный компрессор
             false, 0,   // post-EQ
             true        // лимитер
-        ).setPreferredFrameDuration(10f).build()
+        ).build()
         val dp = DynamicsProcessing(Int.MAX_VALUE, session, cfg)
         dp.setControlStatusListener { _, granted ->
             hasControl = granted
@@ -140,10 +152,60 @@ class AudioEngine(private val ctx: Context) {
         }
     }
 
-    private fun setSystemMax() {
+    /**
+     * Разбивает нужное усиление (дБ относительно максимума) на системный шаг
+     * и цифровой остаток <= 0 дБ (или > 0 при запасе усиления на максимуме).
+     */
+    private fun splitGain(gainDb: Float): Pair<Int, Float> {
+        if (gainDb <= LimiterState.MUTE_DB) return 0 to LimiterState.MUTE_DB
+        val table = stepTable()
+        val max = table.size - 1
+        for (i in 1..max) {
+            if (table[i] >= gainDb) return i to (gainDb - table[i])
+        }
+        return max to (gainDb - table[max])
+    }
+
+    private var tableDevice = -1
+    private var tableCache = FloatArray(0)
+
+    /** дБ каждого системного шага относительно максимального (max → 0 дБ). */
+    private fun stepTable(): FloatArray {
+        val device = currentDeviceType()
         val max = am.getStreamMaxVolume(STREAM)
-        if (am.getStreamVolume(STREAM) != max) {
-            runCatching { am.setStreamVolume(STREAM, max, 0) }
+        if (device == tableDevice && tableCache.size == max + 1) return tableCache
+        val raw = FloatArray(max + 1) { i ->
+            runCatching { am.getStreamVolumeDb(STREAM, i, device) }.getOrDefault(Float.NaN)
+        }
+        val top = raw[max]
+        var t = FloatArray(max + 1) { i -> raw[i] - top }
+        // Таблица битая или "плоская" (например, Bluetooth с абсолютной громкостью) —
+        // считаем шаги равномерными по шкале.
+        val ok = !top.isNaN() && (1..max).all { !t[it].isNaN() && !t[it].isInfinite() } &&
+            t[1] < -10f && (1 until max).all { t[it] <= t[it + 1] }
+        if (!ok) t = FloatArray(max + 1) { i -> LimiterState.RANGE_DB * (i.toFloat() / max - 1f) }
+        t[0] = Float.NEGATIVE_INFINITY
+        tableDevice = device
+        tableCache = t
+        return t
+    }
+
+    private fun currentDeviceType(): Int {
+        if (Build.VERSION.SDK_INT >= 33) {
+            val attrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
+            am.getDevicesForAttributes(attrs).firstOrNull()?.let { return it.type }
+        }
+        val outs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map { it.type }
+        val prio = listOf(
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+        )
+        return prio.firstOrNull { it in outs } ?: AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+    }
+
+    private fun setIndex(idx: Int) {
+        if (am.getStreamVolume(STREAM) != idx) {
+            runCatching { am.setStreamVolume(STREAM, idx, 0) }
         }
     }
 
@@ -159,8 +221,10 @@ class AudioEngine(private val ctx: Context) {
         private const val TAG = "HardLimiter"
         private const val STREAM = AudioManager.STREAM_MUSIC
         private const val CHANNELS = 2
-        private const val ATTACK_MS = 1f
-        private const val RELEASE_MS = 80f
-        private const val RATIO = 50f  // практически "кирпичная стена"
+        // Без look-ahead слишком быстрая атака/отпускание рвут бас — берём
+        // мягче по времени, но с высоким ratio, чтобы порог оставался жёстким.
+        private const val ATTACK_MS = 3f
+        private const val RELEASE_MS = 300f
+        private const val RATIO = 20f
     }
 }
