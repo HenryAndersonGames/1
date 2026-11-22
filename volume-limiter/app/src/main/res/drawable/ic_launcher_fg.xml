@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- дорожка -->
+    <path android:fillColor="#33FFFFFF" android:pathData="M46,30h16a4,4 0,0 1,4 4v40a4,4 0,0 1,-4 4h-16a4,4 0,0 1,-4 -4v-40a4,4 0,0 1,4 -4z" />
+    <!-- уровень громкости -->
+    <path android:fillColor="#FF4FC3F7" android:pathData="M42,50h24v24a4,4 0,0 1,-4 4h-16a4,4 0,0 1,-4 -4z" />
+    <!-- порог лимитера -->
+    <path android:fillColor="#FFFFB300" android:pathData="M34,41h40v4h-40z" />
+</vector>
